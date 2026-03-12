@@ -2,7 +2,7 @@
   "name": "next-church",
   "author": "Wanderson Chaves (https://github.com/wandersonchaves)",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.14.0"
   },
   "scripts": {
     "build-local": "run-p db-server:memory build:next --race",
