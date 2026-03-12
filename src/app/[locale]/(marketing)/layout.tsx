@@ -1,5 +1,5 @@
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { DemoBanner } from '@/components/DemoBanner';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { Link } from '@/libs/I18nNavigation';
 import { BaseTemplate } from '@/templates/BaseTemplate';
@@ -16,81 +16,64 @@ export default async function Layout(props: {
   });
 
   return (
-    <>
-      <DemoBanner />
-      <BaseTemplate
-        leftNav={(
-          <>
+    <BaseTemplate
+      leftNav={(
+        <>
+          <li>
+            <Link href="/" className="border-none text-gray-700 hover:text-gray-900">
+              {t('home_link')}
+            </Link>
+          </li>
+          <li>
+            <Link href="/about/" className="border-none text-gray-700 hover:text-gray-900">
+              {t('about_link')}
+            </Link>
+          </li>
+          <li>
+            <Link href="/portfolio/" className="border-none text-gray-700 hover:text-gray-900">
+              {t('portfolio_link')}
+            </Link>
+          </li>
+          {/* Link dinâmico para Dashboard apenas se logado */}
+          <SignedIn>
             <li>
-              <Link
-                href="/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
-                {t('home_link')}
+              <Link href="/dashboard/" className="border-none font-bold text-blue-600 hover:text-blue-800">
+                Dashboard
               </Link>
             </li>
+          </SignedIn>
+        </>
+      )}
+      rightNav={(
+        <div className="flex items-center gap-x-5">
+          {/* Se NÃO logado: mostra Sign in / Sign up */}
+          <SignedOut>
             <li>
-              <Link
-                href="/about/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
-                {t('about_link')}
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/counter/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
-                {t('counter_link')}
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/portfolio/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
-                {t('portfolio_link')}
-              </Link>
-            </li>
-            <li>
-              <a
-                className="border-none text-gray-700 hover:text-gray-900"
-                href="https://github.com/ixartz/Next-js-Boilerplate"
-              >
-                GitHub
-              </a>
-            </li>
-          </>
-        )}
-        rightNav={(
-          <>
-            <li>
-              <Link
-                href="/sign-in/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
+              <Link href="/sign-in/" className="border-none text-gray-700 hover:text-gray-900">
                 {t('sign_in_link')}
               </Link>
             </li>
-
             <li>
-              <Link
-                href="/sign-up/"
-                className="border-none text-gray-700 hover:text-gray-900"
-              >
+              <Link href="/sign-up/" className="border-none text-gray-700 hover:text-gray-900">
                 {t('sign_up_link')}
               </Link>
             </li>
+          </SignedOut>
 
+          {/* Se logado: mostra o Botão de Perfil do Usuário */}
+          <SignedIn>
             <li>
-              <LocaleSwitcher />
+              <UserButton appearance={{ elements: { userButtonAvatarBox: 'w-8 h-8' } }} />
             </li>
-          </>
-        )}
-      >
-        <div className="py-5 text-xl [&_p]:my-6">{props.children}</div>
-      </BaseTemplate>
-    </>
+          </SignedIn>
+
+          <li>
+            <LocaleSwitcher />
+          </li>
+        </div>
+      )}
+    >
+      <div className="py-5 text-xl [&_p]:my-6">{props.children}</div>
+    </BaseTemplate>
   );
 }

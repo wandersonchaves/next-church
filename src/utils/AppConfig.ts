@@ -1,26 +1,24 @@
-import type { LocalizationResource } from '@clerk/types';
-import type { LocalePrefixMode } from 'next-intl/routing';
 import { enUS, frFR } from '@clerk/localizations';
 
-/** Locale prefix strategy for next-intl routing. */
-const localePrefix: LocalePrefixMode = 'as-needed';
-
-// FIXME: Update this configuration file based on your project information
 export const AppConfig = {
-  name: 'Nextjs Starter',
+  name: 'Philadelphia Hub',
+  locales: ['en', 'fr'],
+  defaultLocale: 'en',
+  localePrefix: 'as-needed' as const,
   i18n: {
     locales: ['en', 'fr'],
     defaultLocale: 'en',
-    localePrefix,
+    localePrefix: 'as-needed' as const,
   },
 };
 
-const supportedLocales: Record<string, LocalizationResource> = {
-  en: enUS,
-  fr: frFR,
-};
-
+/**
+ * Configuração de localizações do Clerk compatível com o layout do boilerplate.
+ */
 export const ClerkLocalizations = {
+  supportedLocales: {
+    en: enUS,
+    fr: frFR,
+  },
   defaultLocale: enUS,
-  supportedLocales,
 };
