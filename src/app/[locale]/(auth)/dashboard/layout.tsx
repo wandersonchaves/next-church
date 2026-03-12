@@ -1,4 +1,4 @@
-import { SignOutButton } from '@clerk/nextjs';
+import { OrganizationSwitcher, SignOutButton } from '@clerk/nextjs';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { Link } from '@/libs/I18nNavigation';
@@ -10,7 +10,7 @@ export default async function DashboardLayout(props: {
 }) {
   const { locale } = await props.params;
   setRequestLocale(locale);
-  const t = await getTranslations({
+  const t = await await getTranslations({
     locale,
     namespace: 'DashboardLayout',
   });
@@ -29,6 +29,14 @@ export default async function DashboardLayout(props: {
           </li>
           <li>
             <Link
+              href="/dashboard/members/new"
+              className="border-none text-gray-700 hover:text-gray-900"
+            >
+              Cadastrar Membro
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/dashboard/user-profile/"
               className="border-none text-gray-700 hover:text-gray-900"
             >
@@ -38,7 +46,19 @@ export default async function DashboardLayout(props: {
         </>
       )}
       rightNav={(
-        <>
+        <div className="flex items-center gap-x-5">
+          <li>
+            <OrganizationSwitcher
+              afterCreateOrganizationUrl="/dashboard"
+              afterSelectOrganizationUrl="/dashboard"
+              appearance={{
+                elements: {
+                  organizationSwitcherTrigger: 'py-1 px-2 border border-gray-300 rounded hover:bg-gray-50',
+                },
+              }}
+            />
+          </li>
+
           <li>
             <SignOutButton>
               <button className="border-none text-gray-700 hover:text-gray-900" type="button">
@@ -50,7 +70,7 @@ export default async function DashboardLayout(props: {
           <li>
             <LocaleSwitcher />
           </li>
-        </>
+        </div>
       )}
     >
       {props.children}

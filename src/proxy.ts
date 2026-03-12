@@ -8,28 +8,20 @@ import { routing } from './libs/I18nRouting';
 
 const handleI18nRouting = createMiddleware(routing);
 
+// Rotas que exigem autenticação obrigatória
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/:locale/dashboard(.*)',
 ]);
 
-const isAuthPage = createRouteMatcher([
-  '/sign-in(.*)',
-  '/:locale/sign-in(.*)',
-  '/sign-up(.*)',
-  '/:locale/sign-up(.*)',
-]);
-
-// Improve security with Arcjet
+// Configuração do Arcjet para bots
 const aj = arcjet.withRule(
   detectBot({
     mode: 'LIVE',
-    // Block all bots except the following
     allow: [
-      // See https://docs.arcjet.com/bot-protection/identifying-bots
-      'CATEGORY:SEARCH_ENGINE', // Allow search engines
-      'CATEGORY:PREVIEW', // Allow preview links to show OG images
-      'CATEGORY:MONITOR', // Allow uptime monitoring services
+      'CATEGORY:SEARCH_ENGINE',
+      'CATEGORY:PREVIEW',
+      'CATEGORY:MONITOR',
     ],
   }),
 );
@@ -38,41 +30,33 @@ export default async function proxy(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
-  // Verify the request with Arcjet
-  // Use `process.env` instead of Env to reduce bundle size in middleware
+  // 1. Proteção Arcjet (Bot Detection)
   if (process.env.ARCJET_KEY) {
     const decision = await aj.protect(request);
-
     if (decision.isDenied()) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
 
-  // Clerk keyless mode doesn't work with i18n, this is why we need to run the middleware conditionally
-  if (
-    isAuthPage(request) || isProtectedRoute(request)
-  ) {
-    return clerkMiddleware(async (auth, req) => {
-      if (isProtectedRoute(req)) {
-        const locale = req.nextUrl.pathname.match(/(\/.*)\/dashboard/)?.at(1) ?? '';
+  // 2. Executamos o ClerkMiddleware em TODAS as rotas mapeadas pelo matcher.
+  // Isso é necessário para usar componentes de Auth no layout de marketing.
+  return clerkMiddleware(async (auth, req) => {
+    // Se for uma rota protegida, garantimos que o usuário está logado
+    if (isProtectedRoute(req)) {
+      const locale = req.nextUrl.pathname.match(/(\/.*)\/dashboard/)?.at(1) ?? '';
+      const signInUrl = new URL(`${locale}/sign-in`, req.url);
 
-        const signInUrl = new URL(`${locale}/sign-in`, req.url);
+      await auth.protect({
+        unauthenticatedUrl: signInUrl.toString(),
+      });
+    }
 
-        await auth.protect({
-          unauthenticatedUrl: signInUrl.toString(),
-        });
-      }
-
-      return handleI18nRouting(req);
-    })(request, event);
-  }
-
-  return handleI18nRouting(request);
+    // Após processar Auth, passamos para o I18n
+    return handleI18nRouting(req);
+  })(request, event);
 }
 
 export const config = {
-  // Match all pathnames except for
-  // - … if they start with `/_next`, `/_vercel` or `monitoring`
-  // - … the ones containing a dot (e.g. `favicon.ico`)
+  // Matcher padrão que exclui arquivos estáticos e pastas de sistema
   matcher: '/((?!_next|_vercel|monitoring|.*\\..*).*)',
 };
