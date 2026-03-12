@@ -5,14 +5,14 @@ const config: KnipConfig = {
   ignore: [
     'checkly.config.ts',
     'src/libs/I18n.ts',
+    'src/libs/Seed.ts', // Utilitário de desenvolvimento
     'src/types/I18n.ts',
     'tests/**/*.ts',
   ],
   // Dependencies to ignore during analysis
   ignoreDependencies: [
     '@commitlint/types',
-    '@clerk/types',
-    '@swc/helpers', // Avoid error in CI: "`npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync."
+    '@swc/helpers', // Avoid error in CI
     'conventional-changelog-conventionalcommits',
     'vite',
   ],
