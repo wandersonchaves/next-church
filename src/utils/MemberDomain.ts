@@ -1,8 +1,13 @@
 export const MemberDomain = {
   /**
-   * Calcula a trilha Kids baseada na idade atual.
-   * 0-2: Berçário, 3-5: Maternal, 6-9: Kids 1, 10-14: Juniores.
-   * @param birthDate - Data de nascimento do membro para calcular a idade.
+   * Calcula a classe Kids com base na idade exata.
+   * Regras:
+   * 0-2: Berçário
+   * 3-5: Maternal
+   * 6-9: Kids 1
+   * 10-14: Juniores
+   * 15+: Adulto
+   * @param birthDate - A data de nascimento do membro.
    */
   getKidsClass: (birthDate: Date) => {
     const today = new Date();
@@ -13,40 +18,44 @@ export const MemberDomain = {
       age--;
     }
 
-    if (age < 0 || age > 14) {
+    if (age < 0) {
       return null;
     }
     if (age <= 2) {
-      return 'BERCARIO';
+      return 'BERCÁRIO';
     }
     if (age <= 5) {
       return 'MATERNAL';
     }
     if (age <= 9) {
-      return 'KIDS_1';
+      return 'KIDS 1';
     }
-    return 'JUNIORES';
+    if (age <= 14) {
+      return 'JUNIORES';
+    }
+    return null; // Acima de 14 anos não é mais Kids
   },
 
   /**
    * State Machine para a Jornada de 7 Passos.
    * @param current - O passo atual do membro na jornada.
-   * @param next - O próximo passo para o qual o membro deseja transitar.
+   * @param next - O próximo passo para o qual o membro deseja progredir.
    */
   canTransitionTo: (current: string, next: string): boolean => {
     const steps = [
       'DECISION',
-      'CONSOLIDATION',
+      'CELL',
+      'UNIVERSITY_OF_LIFE',
       'ENCOUNTER',
-      'POST_ENCOUNTER',
-      'SCHOOL_OF_LEADERS',
-      'PRE_REENTRY',
+      'LEADERSHIP_TRAINING',
+      'RE_ENCOUNTER',
       'SENDING',
     ];
 
     const currentIndex = steps.indexOf(current);
     const nextIndex = steps.indexOf(next);
 
+    // Permite avançar um por um ou resetar para o início
     return nextIndex === currentIndex + 1 || next === 'DECISION';
   },
 };
