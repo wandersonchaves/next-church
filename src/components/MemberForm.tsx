@@ -24,7 +24,6 @@ export const MemberForm = (props: MemberFormProps) => {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
 
-  // MemberInput agora é 100% consistente entre Form e Zod (tudo string/null)
   const { register, handleSubmit, watch, formState: { isSubmitting } } = useForm<MemberInput>({
     resolver: zodResolver(MemberSchema),
     defaultValues: {
@@ -34,7 +33,8 @@ export const MemberForm = (props: MemberFormProps) => {
       phone: '',
       email: '',
       leaderId: '',
-      generationSlot: '', // Inicializado como string vazia (A definir)
+      generationSlot: '',
+      isBaptized: false,
     },
   });
 
@@ -53,10 +53,12 @@ export const MemberForm = (props: MemberFormProps) => {
   const onSubmit: SubmitHandler<MemberInput> = async (data) => {
     setError(null);
     const result = await createMemberAction(data);
-    if (result.success) {
+
+    // Type Guard para validar o retorno da Server Action
+    if ('success' in result && result.success) {
       router.push('/dashboard');
       router.refresh();
-    } else {
+    } else if ('error' in result) {
       setError(result.error || 'Ocorreu um erro desconhecido.');
     }
   };
@@ -115,7 +117,6 @@ export const MemberForm = (props: MemberFormProps) => {
               </option>
             ))}
           </select>
-          <p className="ml-2 text-[10px] text-slate-400 italic">Escolha a vaga que este membro ocupará na equipe do líder.</p>
         </div>
       </div>
 
@@ -130,12 +131,9 @@ export const MemberForm = (props: MemberFormProps) => {
             </p>
           )}
         </div>
-        <div className="space-y-1">
-          <label htmlFor="gender" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Gênero</label>
-          <select {...register('gender')} className="w-full rounded-2xl border-2 border-slate-100 px-5 py-4 font-bold text-slate-700 outline-none">
-            <option value="M">Masculino</option>
-            <option value="F">Feminino</option>
-          </select>
+        <div className="flex items-center gap-4 space-y-1 pt-6">
+          <input type="checkbox" {...register('isBaptized')} id="isBaptized" className="h-6 w-6 rounded-lg border-2 border-slate-200 text-blue-600 focus:ring-blue-500/20" />
+          <label htmlFor="isBaptized" className="text-[10px] font-black tracking-widest text-slate-500 uppercase">Membro é Batizado?</label>
         </div>
       </div>
 
