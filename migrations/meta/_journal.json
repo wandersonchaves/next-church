@@ -15,6 +15,20 @@
       "when": 1773170937323,
       "tag": "0001_lucky_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773279739947,
+      "tag": "0002_fearless_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773401598886,
+      "tag": "0003_green_jean_grey",
+      "breakpoints": true
     }
   ]
 }
