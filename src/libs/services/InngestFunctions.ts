@@ -52,7 +52,7 @@ export const onMemberCreated = inngest.createFunction(
  */
 export const dailyBirthdayCheck = inngest.createFunction(
   { id: "daily-birthday-check", name: "Cron: Parabéns Aniversariantes" },
-  { cron: "33 13 * * *" }, // Alterado para 12:15 UTC (~09:15 AM Brasília) para disparar agora
+  { cron: "* 12 * * *" }, // Alterado para 12:00 UTC (~09:00 AM Brasília)
   async ({ step }) => {
     // 1. Busca todos os aniversariantes do dia (independente da Org)
     const birthdayMembers = await step.run('fetch-birthdays', async () => {
