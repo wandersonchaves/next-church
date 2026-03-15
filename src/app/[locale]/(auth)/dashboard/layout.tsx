@@ -37,6 +37,14 @@ export default async function DashboardLayout(props: {
           </li>
           <li>
             <Link
+              href="/dashboard/communication"
+              className="border-none font-bold text-indigo-600 hover:text-indigo-800"
+            >
+              Hub de Comunicação
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/dashboard/user-profile/"
               className="border-none text-gray-700 hover:text-gray-900"
             >

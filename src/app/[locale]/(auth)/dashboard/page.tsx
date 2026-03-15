@@ -37,7 +37,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] p-4 font-sans antialiased lg:p-10">
-      <div className="mx-auto max-w-[1600px] space-y-10">
+      <div className="mx-auto max-w-400 space-y-10">
 
         {/* TOP BAR: Branding & Search */}
         <header className="flex flex-col items-start justify-between gap-6 xl:flex-row xl:items-center">
@@ -97,7 +97,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
 
             {/* TREE CONTAINER */}
             <div className="overflow-hidden rounded-[3rem] border border-slate-200/60 bg-white shadow-2xl shadow-slate-200/50">
-              <div className="flex items-center justify-between border-b border-slate-50 bg-gradient-to-r from-white to-slate-50/50 px-10 py-8">
+              <div className="flex items-center justify-between border-b border-slate-50 bg-linear-to-r from-white to-slate-50/50 px-10 py-8">
                 <div>
                   <h2 className="text-2xl font-black tracking-tight text-slate-800">MAPA DE LINHAGEM</h2>
                   <p className="mt-1 text-[10px] font-black tracking-[0.2em] text-blue-600 uppercase">Hierarquia Estratégica G12</p>
@@ -109,7 +109,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
                 )}
               </div>
 
-              <div className="custom-scrollbar max-h-[900px] overflow-y-auto p-8 md:p-12">
+              <div className="max-h-225 overflow-y-auto p-8 md:p-12">
                 {treeData.length > 0
                   ? (
                       <div className="space-y-4">
@@ -158,14 +158,14 @@ export default async function DashboardPage(props: DashboardPageProps) {
                 <KidsTile label="Juniores" count={0} />
               </div>
 
-              <div className="mt-8 flex items-center justify-between rounded-[1.5rem] bg-slate-900 p-5 text-white shadow-2xl shadow-slate-900/20">
+              <div className="mt-8 flex items-center justify-between rounded-3xl bg-slate-900 p-5 text-white shadow-2xl shadow-slate-900/20">
                 <span className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Total Kids</span>
                 <span className="mr-2 text-2xl font-black italic">0</span>
               </div>
             </div>
 
             {/* TIP BOX */}
-            <div className="group relative overflow-hidden rounded-[3rem] bg-gradient-to-br from-blue-600 to-indigo-700 p-10 text-white shadow-2xl">
+            <div className="group relative overflow-hidden rounded-[3rem] bg-linear-to-br from-blue-600 to-indigo-700 p-10 text-white shadow-2xl">
               <ShieldCheck className="absolute -right-6 -bottom-6 h-40 w-40 transform text-white/10 transition-transform duration-700 group-hover:scale-110 group-hover:-rotate-12" />
               <div className="relative z-10 space-y-4">
                 <h4 className="text-xs font-black tracking-[0.2em] text-blue-200 uppercase">Dica do Tech Lead</h4>
@@ -198,7 +198,7 @@ function ModernStatCard({ icon, label, value, color, active }: { icon: React.Rea
   };
 
   return (
-    <div className={`rounded-[2rem] border-2 bg-white p-1 transition-all duration-500 ${active ? 'scale-105 border-blue-500 shadow-2xl shadow-blue-100' : 'border-white shadow-xl shadow-slate-200/50'}`}>
+    <div className={`rounded-4xl border-2 bg-white p-1 transition-all duration-500 ${active ? 'scale-105 border-blue-500 shadow-2xl shadow-blue-100' : 'border-white shadow-xl shadow-slate-200/50'}`}>
       <div className="flex items-center justify-between rounded-[1.8rem] bg-white p-6">
         <div>
           <p className="mb-1.5 text-[9px] font-black tracking-widest text-slate-400 uppercase">{label}</p>
@@ -214,7 +214,7 @@ function ModernStatCard({ icon, label, value, color, active }: { icon: React.Rea
 
 function KidsTile({ label, count }: { label: string; count: number }) {
   return (
-    <div className="cursor-default rounded-[1.5rem] border border-slate-100 bg-slate-50 p-5 transition-all hover:bg-white hover:shadow-lg">
+    <div className="cursor-default rounded-3xl border border-slate-100 bg-slate-50 p-5 transition-all hover:bg-white hover:shadow-lg">
       <p className="mb-1 text-[9px] font-black tracking-tighter text-slate-400 uppercase">{label}</p>
       <p className="text-xl leading-none font-black text-slate-800">{count}</p>
     </div>
