@@ -1,36 +1,29 @@
 import type { G12Node } from '@/libs/services/MemberService';
 
 /**
- * Transforma a lista plana do SQL em árvore JSON.
- * Sincronizado com os aliases camelCase da query.
- * @param flatList - A lista de membros retornada pela consulta SQL recursiva.
+ * Transforma uma lista plana em estrutura de árvore.
+ * Suporta membros órfãos (ex: quando o pai é filtrado).
+ * @param flatList
  */
 export function buildG12Tree(flatList: any[]): G12Node[] {
   const map = new Map<string, G12Node>();
-  const tree: G12Node[] = [];
+  const roots: G12Node[] = [];
 
+  // Primeiro passo: Criar os nós
   flatList.forEach((item) => {
-    // Usamos os nomes exatos definidos nos aliases da query SQL
-    map.set(item.id, {
-      id: item.id,
-      firstName: item.firstName,
-      lastName: item.lastName,
-      leaderId: item.leaderId,
-      currentStep: item.currentStep,
-      level: item.level,
-      generationSlot: item.generationSlot,
-      children: [],
-    });
+    map.set(item.id, { ...item, children: [] });
   });
 
+  // Segundo passo: Ligar pais e filhos
   flatList.forEach((item) => {
     const node = map.get(item.id)!;
     if (item.leaderId && map.has(item.leaderId)) {
       map.get(item.leaderId)!.children.push(node);
     } else {
-      tree.push(node);
+      // Se não tem líder na lista (é raiz ou órfão), adiciona ao topo
+      roots.push(node);
     }
   });
 
-  return tree;
+  return roots;
 }
