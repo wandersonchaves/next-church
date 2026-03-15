@@ -48,11 +48,11 @@ export const onMemberCreated = inngest.createFunction(
 
 /**
  * Cron Job: Verificação diária de aniversariantes.
- * Roda todos os dias às 09:00 AM (Horário de Brasília/UTC-3 aproximado).
+ * Roda todos os dias às 09:15 AM (Horário de Brasília/UTC-3 aproximado).
  */
 export const dailyBirthdayCheck = inngest.createFunction(
-  { id: 'daily-birthday-check', name: 'Cron: Parabéns Aniversariantes' },
-  { cron: '0 12 * * *' }, // 12:00 UTC = ~09:00 AM no Brasil
+  { id: "daily-birthday-check", name: "Cron: Parabéns Aniversariantes" },
+  { cron: "20 12 * * *" }, // Alterado para 12:15 UTC (~09:15 AM Brasília) para disparar agora
   async ({ step }) => {
     // 1. Busca todos os aniversariantes do dia (independente da Org)
     const birthdayMembers = await step.run('fetch-birthdays', async () => {
