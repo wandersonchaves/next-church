@@ -11,10 +11,6 @@ const baseConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // @ts-ignore: Propriedade válida no runtime do Next.js para ignorar lint no build
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   poweredByHeader: false,
   reactStrictMode: true,
   reactCompiler: process.env.NODE_ENV === 'production',
