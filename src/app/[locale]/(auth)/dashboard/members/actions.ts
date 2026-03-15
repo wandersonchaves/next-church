@@ -45,7 +45,7 @@ export async function createMemberAction(data: any) {
 
         lineage = leader?.lineage ? `${leader.lineage}.${leaderId}` : leaderId;
       }
-
+      // 3. Inserir o membro
       const [newMember] = await tx.insert(members).values({
         ...validated.data,
         organizationId: orgId,
@@ -54,6 +54,17 @@ export async function createMemberAction(data: any) {
         birthDate: new Date(validated.data.birthDate),
         generationSlot: validated.data.generationSlot ? Number(validated.data.generationSlot) : null,
       }).returning();
+
+      // 4. Disparar Boas-vindas Assíncrona
+      if (newMember) {
+        await inngest.send({
+          name: 'member/created',
+          data: {
+            memberId: newMember.id,
+            organizationId: orgId,
+          },
+        });
+      }
 
       revalidatePath('/[locale]/dashboard', 'layout');
       return { success: true, data: newMember };
