@@ -4,7 +4,7 @@
 export const WhatsAppService = {
   /**
    * Envia uma mensagem de texto via Evolution API seguindo o padrão exato do Postman.
-   * @param phone - O número do telefone do destinatário (ex: 558699999999).
+   * @param phone - O número do telefone (ex: 86995206925). O prefixo 55 será adicionado se faltar.
    * @param message - O conteúdo da mensagem em texto.
    */
   sendMessage: async (phone: string, message: string) => {
@@ -18,27 +18,32 @@ export const WhatsAppService = {
     }
 
     try {
-      const number = phone.replace(/\D/g, '');
+      // 1. Limpa todos os caracteres não numéricos
+      let cleanNumber = phone.replace(/\D/g, '');
 
-      // Construindo a URL exatamente como no Postman
+      // 2. Normalização Staff-level: Garante o prefixo 55 (Brasil)
+      // Se o número tiver 10 ou 11 dígitos (DDD + Número), adicionamos o 55.
+      if (cleanNumber.length >= 10 && !cleanNumber.startsWith('55')) {
+        cleanNumber = `55${cleanNumber}`;
+      }
+
       const url = `${API_URL.replace(/\/$/, '')}/message/sendText/${INSTANCE}`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': API_KEY, // Cabeçalho exato do seu Postman
+          'apikey': API_KEY,
         },
         body: JSON.stringify({
-          number,
-          text: message, // Estrutura exata do seu Postman
+          number: cleanNumber,
+          text: message,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // Se a API retornar erro, lançamos uma exceção com o detalhe
         const errorMsg = data.message || `Erro HTTP ${response.status}`;
         throw new Error(errorMsg);
       }

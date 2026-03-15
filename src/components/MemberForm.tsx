@@ -194,6 +194,7 @@ export const MemberForm = (props: MemberFormProps) => {
               Telefone (Opcional)
             </label>
             <input {...register('phone')} className="w-full rounded-2xl border-2 border-slate-100 px-6 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5" placeholder="86 99999-9999" />
+            <p className="mt-1 ml-2 text-[9px] font-medium text-slate-400 italic">Apenas DDD e número. O prefixo 55 será adicionado automaticamente.</p>
           </div>
         </div>
 
