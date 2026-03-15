@@ -9,7 +9,7 @@
     "build-stats": "cross-env ANALYZE=true npm run build",
     "build-storybook": "storybook build",
     "build:next": "next build",
-    "build": "next build",
+    "build": "npm install --legacy-peer-deps && next build",
     "check:deps": "knip",
     "check:i18n": "i18n-check -l src/locales -s en -u src -f next-intl",
     "check:types": "tsc --noEmit --pretty",
