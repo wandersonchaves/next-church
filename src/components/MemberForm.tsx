@@ -3,6 +3,7 @@
 import type { SubmitHandler } from 'react-hook-form';
 import type { MemberInput } from '@/validations/MemberValidation';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Award, Calendar, Loader2, Mail, Phone, Plus, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
@@ -22,9 +23,9 @@ type MemberFormProps = {
 
 export const MemberForm = (props: MemberFormProps) => {
   const router = useRouter();
-  const [error, setError] = React.useState<string | null>(null);
+  const [serverError, setServerError] = React.useState<string | null>(null);
 
-  const { register, handleSubmit, watch, formState: { isSubmitting } } = useForm<MemberInput>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<MemberInput>({
     resolver: zodResolver(MemberSchema),
     defaultValues: {
       gender: 'M',
@@ -51,94 +52,180 @@ export const MemberForm = (props: MemberFormProps) => {
   }, [birthDateValue]);
 
   const onSubmit: SubmitHandler<MemberInput> = async (data) => {
-    setError(null);
+    setServerError(null);
     const result = await createMemberAction(data);
 
-    // Type Guard para validar o retorno da Server Action
     if ('success' in result && result.success) {
       router.push('/dashboard');
       router.refresh();
     } else if ('error' in result) {
-      setError(result.error || 'Ocorreu um erro desconhecido.');
+      setServerError(result.error ?? 'Ocorreu um erro desconhecido.');
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-3xl space-y-6 rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-200/50">
-      {error && (
-        <div className="animate-bounce rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600">
-          ⚠️
-          {error}
+    <form onSubmit={handleSubmit(onSubmit)} className="max-w-4xl space-y-8 rounded-[3rem] border border-slate-200 bg-white p-10 shadow-2xl shadow-slate-200/50">
+
+      {/* Header do Formulário */}
+      <div className="flex items-center gap-4 border-b border-slate-50 pb-8">
+        <div className="rounded-3xl bg-blue-600 p-4 text-white shadow-lg shadow-blue-200">
+          <Plus size={24} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-800 uppercase">Novo Integrante</h2>
+          <p className="text-xs font-bold tracking-widest text-slate-400 uppercase">Cadastro Hierárquico G12</p>
+        </div>
+      </div>
+
+      {serverError && (
+        <div className="flex animate-pulse items-center gap-3 rounded-2xl border-2 border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600">
+          <Award size={18} className="rotate-180" />
+          {' '}
+          {serverError}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="space-y-1">
-          <label htmlFor="name" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Nome</label>
-          <input {...register('firstName')} className="w-full rounded-2xl border-2 border-slate-100 px-5 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5" placeholder="João" />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="lastName" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Sobrenome</label>
-          <input {...register('lastName')} className="w-full rounded-2xl border-2 border-slate-100 px-5 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5" placeholder="Silva" />
+      {/* Seção: Identificação */}
+      <div className="space-y-6">
+        <h3 className="flex items-center gap-2 text-[10px] font-black tracking-[0.3em] text-blue-600 uppercase">
+          <User size={14} />
+          {' '}
+          Dados Identitários
+        </h3>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Primeiro Nome</label>
+            <input {...register('firstName')} className={`w-full rounded-2xl border-2 px-6 py-4 font-bold text-slate-700 transition-all outline-none ${errors.firstName ? 'border-red-200 bg-red-50' : 'border-slate-100 focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5'}`} placeholder="Ex: João" />
+            {errors.firstName && <p className="ml-2 text-[10px] font-bold text-red-500">{errors.firstName.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="lastName" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Sobrenome</label>
+            <input {...register('lastName')} className={`w-full rounded-2xl border-2 px-6 py-4 font-bold text-slate-700 transition-all outline-none ${errors.lastName ? 'border-red-200 bg-red-50' : 'border-slate-100 focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5'}`} placeholder="Ex: Silva" />
+            {errors.lastName && <p className="ml-2 text-[10px] font-bold text-red-500">{errors.lastName.message}</p>}
+          </div>
         </div>
       </div>
 
-      <div className="space-y-6 rounded-4xl border-2 border-slate-100 bg-slate-50/50 p-8">
-        <div className="space-y-1">
-          <label htmlFor="leader" className="ml-2 text-[10px] font-black tracking-widest text-blue-600 uppercase">Líder G12</label>
-          <select {...register('leaderId')} className="w-full rounded-2xl border-2 border-white bg-white px-5 py-4 font-black text-slate-800 shadow-sm outline-none focus:border-blue-500/20">
-            <option value="">⭐ PASTOR PRINCIPAL</option>
-            {props.leaders.map((l) => {
-              const indentation = '\u00A0'.repeat((l.level - 1) * 4);
-              const label = l.level === 1 ? '[PASTOR]' : `[F${l.generationSlot || '?'}]`;
-              return (
-                <option key={l.id} value={l.id}>
-                  {indentation}
-                  └─
-                  {l.firstName}
-                  {' '}
-                  {l.lastName}
-                  {' '}
-                  {label}
+      {/* Seção: Hierarquia */}
+      <div className="space-y-8 rounded-[2.5rem] border-2 border-slate-100 bg-slate-50/50 p-8">
+        <h3 className="flex items-center gap-2 text-[10px] font-black tracking-[0.3em] text-blue-600 uppercase">
+          <Award size={14} />
+          {' '}
+          Posicionamento na Visão
+        </h3>
+        <div className="grid grid-cols-1 gap-8">
+          <div className="space-y-1.5">
+            <label htmlFor="leader" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Líder Direto</label>
+            <select {...register('leaderId')} className="w-full cursor-pointer rounded-2xl border-none bg-white px-6 py-4 font-black text-slate-800 shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10">
+              <option value="">⭐ PASTOR PRINCIPAL</option>
+              {props.leaders.map((l) => {
+                const indentation = '\u00A0'.repeat((l.level - 1) * 4);
+                return (
+                  <option key={l.id} value={l.id}>
+                    {indentation}
+                    └─
+                    {l.firstName}
+                    {' '}
+                    {l.lastName}
+                    {' '}
+                    [F
+                    {l.generationSlot || '?'}
+                    ]
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="generation" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Slot de Geração (F1 a F12)</label>
+            <select {...register('generationSlot')} className="w-full cursor-pointer rounded-2xl border-none bg-white px-6 py-4 font-black text-slate-800 shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10">
+              <option value="">⏳ AGUARDANDO DEFINIÇÃO</option>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={`${i + 1}`}>
+                  Geração F
+                  {i + 1}
                 </option>
-              );
-            })}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="generation" className="ml-2 text-[10px] font-black tracking-widest text-blue-600 uppercase">Geração do Membro (F1 a F12)</label>
-          <select {...register('generationSlot')} className="w-full rounded-2xl border-2 border-white bg-white px-5 py-4 font-black text-slate-800 shadow-sm outline-none focus:border-blue-500/20">
-            <option value="">⏳ AGUARDANDO DEFINIÇÃO</option>
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i + 1} value={`${i + 1}`}>
-                Geração F
-                {i + 1}
-              </option>
-            ))}
-          </select>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 pt-4 md:grid-cols-2">
-        <div className="space-y-1">
-          <label htmlFor="birthDay" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Data de Nascimento</label>
-          <input type="date" {...register('birthDate')} className="w-full rounded-2xl border-2 border-slate-100 px-5 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20" />
-          {kidsClass && (
-            <p className="ml-2 text-[10px] font-black text-blue-600 uppercase">
-              Trilha Kids:
-              {kidsClass}
-            </p>
-          )}
+      {/* Seção: Perfil e Contato */}
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="ml-2 flex items-center gap-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+              <Calendar size={12} />
+              {' '}
+              Nascimento
+            </label>
+            <input type="date" {...register('birthDate')} className={`w-full rounded-2xl border-2 px-6 py-4 font-bold text-slate-700 transition-all outline-none ${errors.birthDate ? 'border-red-200 bg-red-50' : 'border-slate-100 focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5'}`} />
+            {kidsClass && (
+              <p className="mt-1 ml-2 text-[10px] font-black text-blue-600 uppercase">
+                Trilha Kids:
+                {kidsClass}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="gender" className="ml-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">Gênero</label>
+            <select {...register('gender')} className="w-full rounded-2xl border-2 border-slate-100 bg-white px-6 py-4 font-bold text-slate-700 outline-none">
+              <option value="M">Masculino</option>
+              <option value="F">Feminino</option>
+            </select>
+          </div>
         </div>
-        <div className="flex items-center gap-4 space-y-1 pt-6">
-          <input type="checkbox" {...register('isBaptized')} id="isBaptized" className="h-6 w-6 rounded-lg border-2 border-slate-200 text-blue-600 focus:ring-blue-500/20" />
-          <label htmlFor="isBaptized" className="text-[10px] font-black tracking-widest text-slate-500 uppercase">Membro é Batizado?</label>
+
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="ml-2 flex items-center gap-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+              <Mail size={12} />
+              {' '}
+              E-mail (Opcional)
+            </label>
+            <input {...register('email')} className="w-full rounded-2xl border-2 border-slate-100 px-6 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5" placeholder="exemplo@igreja.com" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="ml-2 flex items-center gap-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+              <Phone size={12} />
+              {' '}
+              Telefone (Opcional)
+            </label>
+            <input {...register('phone')} className="w-full rounded-2xl border-2 border-slate-100 px-6 py-4 font-bold text-slate-700 transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5" placeholder="86 99999-9999" />
+          </div>
+        </div>
+
+        {/* Checkbox Batismo */}
+        <div className="flex items-center justify-between rounded-4xl border-2 border-blue-100 bg-blue-50/50 p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-xl bg-blue-600 p-3 text-white shadow-md"><Award size={20} /></div>
+            <div>
+              <p className="text-sm font-black tracking-tight text-slate-800 uppercase">Status de Batismo</p>
+              <p className="text-[10px] font-bold tracking-widest text-blue-600 uppercase">Membro já passou pelas águas?</p>
+            </div>
+          </div>
+          <input type="checkbox" {...register('isBaptized')} className="h-8 w-8 cursor-pointer rounded-xl border-2 border-blue-200 text-blue-600 focus:ring-blue-500/20" />
         </div>
       </div>
 
-      <button type="submit" disabled={isSubmitting} className="w-full rounded-3xl bg-linear-to-r from-blue-600 to-indigo-700 py-5 font-black tracking-widest text-white uppercase shadow-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50">
-        {isSubmitting ? 'Gravando...' : 'Finalizar Cadastro'}
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className={`flex w-full items-center justify-center gap-3 rounded-4xl py-6 font-black tracking-[0.2em] text-white uppercase shadow-2xl transition-all ${isSubmitting ? 'bg-slate-400' : 'bg-linear-to-r from-blue-600 to-indigo-700 shadow-blue-200 hover:scale-[1.02] active:scale-[0.98]'}`}
+      >
+        {isSubmitting
+          ? (
+              <>
+                <Loader2 className="animate-spin" size={20} />
+                {' '}
+                Gravando na Linhagem...
+              </>
+            )
+          : (
+              'Finalizar Cadastro de Membro'
+            )}
       </button>
     </form>
   );

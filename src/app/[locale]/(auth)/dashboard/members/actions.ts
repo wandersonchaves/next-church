@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { and, count, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/libs/DB';
+import { inngest } from '@/libs/Inngest';
 import { journeyHistory, memberJourneys, members } from '@/models/Schema';
 import { MemberSchema, StepCompletionSchema } from '@/validations/MemberValidation';
 
@@ -28,7 +29,6 @@ export async function createMemberAction(data: any) {
       const { leaderId } = validated.data;
 
       if (leaderId) {
-        // 1. Validar se o líder já tem 12 discípulos
         const [disciplesCount] = await tx
           .select({ value: count() })
           .from(members)
@@ -38,7 +38,6 @@ export async function createMemberAction(data: any) {
           return { error: 'Este líder já atingiu o limite de 12 discípulos (G12).' };
         }
 
-        // 2. Buscar a linhagem do líder para compor a do novo membro
         const [leader] = await tx
           .select({ lineage: members.lineage })
           .from(members)
@@ -47,7 +46,6 @@ export async function createMemberAction(data: any) {
         lineage = leader?.lineage ? `${leader.lineage}.${leaderId}` : leaderId;
       }
 
-      // 3. Inserir o membro
       const [newMember] = await tx.insert(members).values({
         ...validated.data,
         organizationId: orgId,
@@ -61,13 +59,13 @@ export async function createMemberAction(data: any) {
       return { success: true, data: newMember };
     });
   } catch (e) {
-    console.error(e);
-    return { error: 'Falha ao salvar membro no banco de dados.' };
+    console.error('[CREATE_MEMBER_ERROR]', e);
+    return { error: 'Falha ao salvar membro.' };
   }
 }
 
 /**
- * Registra a conclusão de um passo da jornada com auditoria.
+ * Registra a conclusão de um passo da jornada com auditoria resiliente.
  * @param data
  */
 export async function completeJourneyStepAction(data: any) {
@@ -78,38 +76,36 @@ export async function completeJourneyStepAction(data: any) {
 
   const validated = StepCompletionSchema.safeParse(data);
   if (!validated.success) {
-    return { error: 'Invalid data' };
+    console.warn('[STEP_VALIDATION_ERROR]', validated.error.format());
+    return { error: 'Dados de transição inválidos' };
   }
 
   try {
-    return await db.transaction(async (tx) => {
-      // 1. Buscar membro atual para log de auditoria
+    const result = await db.transaction(async (tx) => {
+      // 1. Buscar membro atual
       const [member] = await tx
         .select()
         .from(members)
         .where(and(eq(members.id, validated.data.memberId), eq(members.organizationId, orgId)));
 
       if (!member) {
-        return { error: 'Member not found' };
+        return { error: 'Membro não encontrado' };
       }
 
-      // 2. Registrar na tabela de jornadas concluídas
+      // 2. Registrar conclusão do passo
       await tx.insert(memberJourneys).values({
         organizationId: orgId,
         memberId: validated.data.memberId,
         step: validated.data.step,
-        notes: validated.data.notes,
-        // Em um sistema real, buscaríamos o UUID do membro que o ClerkUserId representa
-        // Aqui usamos null por simplicidade de domínio inicial
-        validatedById: null,
+        notes: validated.data.notes || `Progredido para ${validated.data.step}`,
       });
 
-      // 3. Atualizar status atual no perfil do membro
+      // 3. Atualizar status no perfil
       await tx.update(members)
         .set({ currentStep: validated.data.step, updatedAt: new Date() })
         .where(eq(members.id, validated.data.memberId));
 
-      // 4. Log histórico
+      // 4. Histórico de auditoria
       await tx.insert(journeyHistory).values({
         memberId: validated.data.memberId,
         oldStep: member.currentStep,
@@ -117,11 +113,30 @@ export async function completeJourneyStepAction(data: any) {
         notes: validated.data.notes,
       });
 
-      revalidatePath('/[locale]/dashboard', 'layout');
       return { success: true };
     });
+
+    // 5. Disparar Inngest FORA da transação para não travar o banco se a fila falhar
+    if (result.success) {
+      try {
+        await inngest.send({
+          name: 'member/step.completed',
+          data: {
+            memberId: validated.data.memberId,
+            organizationId: orgId,
+            newStep: validated.data.step,
+          },
+        });
+      } catch (inngestErr) {
+        console.warn('[INNGEST_SEND_WARN] Fila offline, mas banco atualizado.', inngestErr);
+      }
+
+      revalidatePath('/[locale]/dashboard', 'layout');
+    }
+
+    return result;
   } catch (e) {
-    console.error(e);
-    return { error: 'Falha ao progredir jornada.' };
+    console.error('[JOURNEY_PROGRESS_ERROR]', e);
+    return { error: 'Erro interno no servidor ao processar jornada.' };
   }
 }
