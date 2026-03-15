@@ -8,23 +8,31 @@ import { routing } from './libs/I18nRouting';
 
 const handleI18nRouting = createMiddleware(routing);
 
+// Rotas protegidas
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/:locale/dashboard(.*)',
 ]);
 
-// Rota do Inngest que deve ser totalmente pública e ignorada pelo I18n
+// Rota do Inngest: DEVE SER TOTALMENTE PÚBLICA PARA O CLOUD SYNC
 const isInngestRoute = createRouteMatcher(['/api/inngest']);
 
 const aj = arcjet.withRule(
   detectBot({
     mode: 'LIVE',
-    allow: ['CATEGORY:SEARCH_ENGINE', 'CATEGORY:PREVIEW', 'CATEGORY:MONITOR'],
+    allow: [
+      'CATEGORY:SEARCH_ENGINE',
+      'CATEGORY:PREVIEW',
+      'CATEGORY:MONITOR',
+    ],
   }),
 );
 
-export default async function proxy(request: NextRequest, event: NextFetchEvent) {
-  // 1. Ignorar I18n e Clerk para rotas de API do Inngest
+export default async function proxy(
+  request: NextRequest,
+  event: NextFetchEvent,
+) {
+  // 1. BYPASS TOTAL PARA INNGEST (CRÍTICO PARA PRODUÇÃO)
   if (isInngestRoute(request)) {
     return NextResponse.next();
   }
@@ -42,8 +50,12 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
     if (isProtectedRoute(req)) {
       const locale = req.nextUrl.pathname.match(/(\/.*)\/dashboard/)?.at(1) ?? '';
       const signInUrl = new URL(`${locale}/sign-in`, req.url);
-      await auth.protect({ unauthenticatedUrl: signInUrl.toString() });
+
+      await auth.protect({
+        unauthenticatedUrl: signInUrl.toString(),
+      });
     }
+
     return handleI18nRouting(req);
   })(request, event);
 }
