@@ -43,5 +43,18 @@
     "eslint": "^9.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "esbuild": "0.25.0"
+  },
+  "supportedArchitectures": {
+    "os": [
+      "linux",
+      "darwin"
+    ],
+    "cpu": [
+      "x64",
+      "arm64"
+    ]
   }
 }
