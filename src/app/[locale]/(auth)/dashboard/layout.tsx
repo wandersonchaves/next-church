@@ -1,8 +1,5 @@
-import { OrganizationSwitcher, SignOutButton } from '@clerk/nextjs';
-import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { LocaleSwitcher } from '@/components/LocaleSwitcher';
-import { Link } from '@/libs/I18nNavigation';
-import { BaseTemplate } from '@/templates/BaseTemplate';
+import { setRequestLocale } from 'next-intl/server';
+import { GlobalHeader } from '@/components/Dashboard/GlobalHeader';
 
 export default async function DashboardLayout(props: {
   children: React.ReactNode;
@@ -10,78 +7,23 @@ export default async function DashboardLayout(props: {
 }) {
   const { locale } = await props.params;
   setRequestLocale(locale);
-  const t = await await getTranslations({
-    locale,
-    namespace: 'DashboardLayout',
-  });
 
   return (
-    <BaseTemplate
-      leftNav={(
-        <>
-          <li>
-            <Link
-              href="/dashboard/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('dashboard_link')}
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/members/new"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              Cadastrar Membro
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/communication"
-              className="border-none font-bold text-indigo-600 hover:text-indigo-800"
-            >
-              Hub de Comunicação
-            </Link>
-          </li>
-          <li>
-            <Link
-              href="/dashboard/user-profile/"
-              className="border-none text-gray-700 hover:text-gray-900"
-            >
-              {t('user_profile_link')}
-            </Link>
-          </li>
-        </>
-      )}
-      rightNav={(
-        <div className="flex items-center gap-x-5">
-          <li>
-            <OrganizationSwitcher
-              afterCreateOrganizationUrl="/dashboard"
-              afterSelectOrganizationUrl="/dashboard"
-              appearance={{
-                elements: {
-                  organizationSwitcherTrigger: 'py-1 px-2 border border-gray-300 rounded hover:bg-gray-50',
-                },
-              }}
-            />
-          </li>
+    <div className="min-h-screen bg-slate-50 font-sans antialiased">
+      {/* HEADER UNIFICADO (SSOT) */}
+      <GlobalHeader />
 
-          <li>
-            <SignOutButton>
-              <button className="border-none text-gray-700 hover:text-gray-900" type="button">
-                {t('sign_out')}
-              </button>
-            </SignOutButton>
-          </li>
+      {/* ÁREA DE CONTEÚDO */}
+      <main>
+        {props.children}
+      </main>
 
-          <li>
-            <LocaleSwitcher />
-          </li>
-        </div>
-      )}
-    >
-      {props.children}
-    </BaseTemplate>
+      {/* FOOTER DISCRETO */}
+      <footer className="mt-20 border-t border-slate-100 bg-white py-10 text-center">
+        <p className="text-[10px] font-black tracking-[0.3em] text-slate-300 uppercase">
+          Philadelphia Hub • G12 Vision Management
+        </p>
+      </footer>
+    </div>
   );
 }
