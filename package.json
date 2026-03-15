@@ -39,10 +39,14 @@
   "devDependencies": {
     "@antfu/eslint-config": "^3.16.0",
     "@playwright/test": "^1.58.2",
+    "@tailwindcss/postcss": "^4.2.1",
     "drizzle-kit": "^0.31.9",
     "eslint": "^9.21.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "webpack": "^5.98.0"
   },
   "overrides": {
     "esbuild": "0.25.0"
