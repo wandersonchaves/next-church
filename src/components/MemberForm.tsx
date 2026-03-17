@@ -96,7 +96,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
   const handleDelete = async () => {
     if (!initialData?.id) return;
-    if (!confirm("Tem certeza que deseja excluir este membro permanentemente?")) return;
+    if (!confirm("Tem certeza que deseja excluir este integrante permanentemente?")) return;
 
     setIsDeleting(true);
     const result = await deleteMemberAction(initialData.id);
@@ -117,7 +117,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
           <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
             {isEditMode ? "Editar Ficha" : "Novo Integrante"}
           </h2>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 italic">Linhagem e Dados Ministeriais</p>
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 italic">Linhagem e Gestão de Gerações</p>
         </div>
         {(isSubmitting || isDeleting) && <Loader2 className="animate-spin text-blue-600" size={32} />}
       </header>
@@ -126,7 +126,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
       <div className="space-y-6">
         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 flex items-center gap-2">
-          <User size={14} /> Informações Identitárias
+          <User size={14} /> Dados Identitários
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
@@ -142,7 +142,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
       <div className="p-8 md:p-10 bg-slate-900 rounded-[3rem] shadow-2xl space-y-8 relative overflow-visible">
         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 flex items-center gap-2">
-          <Award size={14} /> Posicionamento G12
+          <Award size={14} /> Posicionamento na Visão G12
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -152,7 +152,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
               <Search size={18} className="absolute left-6 top-5 text-slate-500" />
               <input
                 type="text"
-                placeholder={selectedLeader ? `${selectedLeader.firstName} ${selectedLeader.lastName}` : "Pesquisar nome..."}
+                placeholder={selectedLeader ? `${selectedLeader.firstName} ${selectedLeader.lastName}` : "Pesquisar líder..."}
                 value={searchTerm}
                 autoComplete="off"
                 onChange={(e) => { setSearchTerm(e.target.value); setIsOpen(true); }}
@@ -184,7 +184,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
                   >
                     <div className="flex flex-col">
                       <span className="leading-none">{l.firstName} {l.lastName}</span>
-                      <span className="text-[9px] font-black text-slate-300 uppercase mt-1.5 tracking-widest">Geração F{l.generationSlot || '?'} • Nível {l.level}</span>
+                      <span className="text-[9px] font-black text-slate-300 uppercase mt-1.5 tracking-widest">Geração {l.generationSlot || '?'}</span>
                     </div>
                     {leaderId === l.id && <Check size={16} />}
                   </button>
@@ -194,13 +194,13 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Slot na Equipe (F1-F12)</label>
+            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Nível de Geração (1 a 12)</label>
             <div className="relative">
               <ChevronDown size={18} className="absolute right-6 top-5 text-blue-400 pointer-events-none" />
               <select {...register('generationSlot')} className="w-full px-8 py-5 rounded-4xl border-none shadow-inner outline-none focus:ring-4 focus:ring-blue-500/20 font-black text-slate-800 cursor-pointer appearance-none bg-white h-16">
                 <option value="">⏳ AGUARDANDO POSIÇÃO</option>
                 {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={`${i + 1}`}>DISCÍPULO F{i + 1}</option>
+                  <option key={i + 1} value={`${i + 1}`}>GERAÇÃO {i + 1}</option>
                 ))}
               </select>
             </div>
@@ -241,7 +241,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
           disabled={isSubmitting || isDeleting}
           className={`flex-1 py-7 rounded-[2.5rem] text-white font-black uppercase tracking-[0.3em] shadow-2xl transition-all flex items-center justify-center gap-4 text-sm ${isSubmitting ? 'bg-slate-400' : 'bg-linear-to-r from-blue-600 to-indigo-700 hover:scale-[1.02] active:scale-[0.98]'}`}
         >
-          {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? <><Save size={20} /> Salvar Alterações</> : "Cadastrar Membro")}
+          {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? <><Save size={20} /> Salvar Alterações</> : "Cadastrar na Visão")}
         </button>
 
         {isEditMode && (
