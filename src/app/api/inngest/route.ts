@@ -5,6 +5,7 @@ import {
   onMemberCreated,
   onStepCompleted,
   sendBroadcast,
+  weeklyLeadershipReport,
 } from '@/libs/services/InngestFunctions';
 
 export const { GET, POST, PUT } = serve({
@@ -14,5 +15,6 @@ export const { GET, POST, PUT } = serve({
     sendBroadcast,
     onMemberCreated,
     dailyBirthdayCheck,
+    weeklyLeadershipReport,
   ],
 });

@@ -43,7 +43,6 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
   onPromote: (node: G12Node) => void,
   loading: boolean
 }) => {
-  // Garantia de segurança: node.children pode ser undefined
   const children = node.children || [];
   const hasChildren = children.length > 0;
 
@@ -51,9 +50,9 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
   const nextStep = currentIdx < stepsOrder.length - 1 ? stepsOrder[currentIdx + 1] : null;
 
   const getLabel = () => {
-    if (node.level === 1) return { text: 'LIDERANÇA', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
+    if (node.level === 1) return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
     if (!node.generationSlot) return { text: 'PENDENTE', color: 'border-slate-300 text-slate-400', icon: <User size={16} /> };
-    return { text: `F${node.generationSlot}`, color: 'border-blue-500 text-blue-600', icon: <Shield size={16} /> };
+    return { text: `${node.generationSlot}ª GER`, color: 'border-blue-500 text-blue-600', icon: <Shield size={16} /> };
   };
 
   const label = getLabel();
@@ -94,7 +93,7 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
           {hasChildren && (
             <span className="text-[8px] font-bold text-slate-400 flex items-center gap-1">
               {isOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              {children.length} disc.
+              {children.length} integrantes
             </span>
           )}
         </div>

@@ -1,193 +1,185 @@
-import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
+import { members } from '@/models/Schema';
+import { eq, and, isNull } from 'drizzle-orm';
 import { inngest } from '@/libs/Inngest';
-import { members, notificationLogs } from '@/models/Schema';
 import { WhatsAppService } from './WhatsAppService';
+import { getWeeklySummary } from './AuditService';
+import { clerkClient } from '@clerk/nextjs/server';
+import { AppConfig } from '@/utils/AppConfig';
 
 /**
- * Automação: Envio de Boas-vindas ao cadastrar novo membro.
+ * Helper para buscar o nome da igreja no Clerk.
+ */
+async function getChurchName(orgId: string) {
+  try {
+    const client = await clerkClient();
+    const org = await client.organizations.getOrganization({ organizationId: orgId });
+    return org.name || 'Filadelfia';
+  } catch {
+    return 'Filadelfia';
+  }
+}
+
+/**
+ * Evento: Boas-vindas para novo membro.
  */
 export const onMemberCreated = inngest.createFunction(
-  { id: 'on-member-created', name: 'Automação: Boas-vindas' },
+  { id: 'on-member-created', name: 'Novo Membro: Boas-vindas' },
   { event: 'member/created' },
   async ({ event, step }) => {
     const { memberId, organizationId } = event.data;
 
+    const churchName = await step.run('get-church-name', async () => await getChurchName(organizationId));
+
     const member = await step.run('fetch-member', async () => {
-      const [res] = await db.select().from(members).where(eq(members.id, memberId));
-      return res;
+      const [result] = await db
+        .select()
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.organizationId, organizationId)))
+        .limit(1);
+      return result;
     });
 
-    if (!member || !member.phone) {
-      return { error: 'No contact info' };
-    }
-
-    // Espera 5 minutos para o envio parecer menos robótico
-    await step.sleep('wait-a-bit', '5m');
-
-    const message = `Olá ${member.firstName}! Seja muito bem-vindo(a) ao *Philadelphia Hub*! 🎉\n\nÉ uma alegria ter você conosco em nossa família espiritual. Estamos orando para que este novo tempo seja de muito fruto e crescimento em sua vida.\n\nDeus te abençoe!`;
-
-    const res = await step.run('send-whatsapp', async () => {
-      return await WhatsAppService.sendMessage(member.phone!, message);
-    });
-
-    await step.run('log-notification', async () => {
-      await db.insert(notificationLogs).values({
-        organizationId,
-        memberId,
-        type: 'WHATSAPP_WELCOME',
-        status: res.sent ? 'SENT' : 'FAILED',
-        content: message,
-        sentAt: new Date(),
+    if (member?.phone) {
+      await step.run('send-whatsapp', async () => {
+        const welcomeMessage = `Olá ${member.firstName}! Seja muito bem-vindo(a) à família *${churchName}*. Estamos felizes com sua decisão! 🙌`;
+        await WhatsAppService.sendMessage(member.phone!, welcomeMessage);
       });
-    });
+    }
 
     return { status: 'welcome_sent' };
   },
 );
 
 /**
- * Cron Job: Verificação diária de aniversariantes.
- * Roda todos os dias às 09:15 AM (Horário de Brasília/UTC-3 aproximado).
- */
-export const dailyBirthdayCheck = inngest.createFunction(
-  { id: "daily-birthday-check", name: "Cron: Parabéns Aniversariantes" },
-  { cron: "* 12 * * *" }, // Alterado para 12:00 UTC (~09:00 AM Brasília)
-  async ({ step }) => {
-    // 1. Busca todos os aniversariantes do dia (independente da Org)
-    const birthdayMembers = await step.run('fetch-birthdays', async () => {
-      return await db.select().from(members).where(
-        sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`,
-      );
-    });
-
-    const results = [];
-
-    // 2. Envio em lote com throttling
-    for (const member of birthdayMembers) {
-      if (!member.phone) {
-        continue;
-      }
-
-      const message = `Parabéns, ${member.firstName}! 🎂🎈\n\nNós do *Philadelphia Hub* celebramos a sua vida hoje! Desejamos que o Senhor te conceda um ano de vitórias, saúde e muita presença de Deus.\n\nTenha um dia abençoado!`;
-
-      await step.run(`send-birthday-to-${member.id}`, async () => {
-        const res = await WhatsAppService.sendMessage(member.phone!, message);
-
-        await db.insert(notificationLogs).values({
-          organizationId: member.organizationId,
-          memberId: member.id,
-          type: 'WHATSAPP_BIRTHDAY',
-          status: res.sent ? 'SENT' : 'FAILED',
-          content: message,
-          sentAt: new Date(),
-        });
-      });
-
-      results.push(member.id);
-      await step.sleep(`throttle-${member.id}`, '2s');
-    }
-
-    return { processed: results.length };
-  },
-);
-
-/**
- * Função Inngest que gerencia a jornada do membro e registra auditoria de mensagens.
+ * Evento: Conclusão de Passo da Jornada.
  */
 export const onStepCompleted = inngest.createFunction(
-  { id: 'on-member-step-completed', name: 'Automação: Progresso na Jornada' },
+  { id: 'on-step-completed', name: 'Jornada: Parabéns pelo Passo' },
   { event: 'member/step.completed' },
   async ({ event, step }) => {
     const { memberId, organizationId, newStep } = event.data;
 
+    const churchName = await step.run('get-church-name', async () => await getChurchName(organizationId));
+
     const member = await step.run('fetch-member', async () => {
-      const [res] = await db.select().from(members).where(eq(members.id, memberId));
-      return res;
+      const [result] = await db
+        .select()
+        .from(members)
+        .where(and(eq(members.id, memberId), eq(members.organizationId, organizationId)))
+        .limit(1);
+      return result;
     });
 
-    if (!member || !member.phone) {
-      return { error: 'Member or phone not found' };
-    }
-
-    const templates: Record<string, string> = {
-      UNIVERSITY_OF_LIFE: `Olá ${member.firstName}! 🎉\n\nParabéns por concluir a *Universidade da Vida*! Que alegria ver seu crescimento.\n\nO seu próximo passo nessa jornada é o *Encontro com Deus*. Já estamos com as inscrições abertas e seria incrível ter você conosco! 🔥\n\nDeus te abençoe!`,
-      ENCOUNTER: `Ei ${member.firstName}! O seu Encontro com Deus foi apenas o começo. ✨\n\nAgora você iniciou o nível de *Capacitação de Destino*. Estamos orando por você nessa nova fase de liderança!`,
-      SENDING: `Glória a Deus, ${member.firstName}! 🚀\n\nVocê acaba de ser *Enviado* como um líder na visão G12. Vá e frutifique! Estamos juntos nessa missão.`,
-    };
-
-    const message = templates[newStep];
-    if (!message) {
-      return { status: 'no_message_needed' };
-    }
-
-    await step.sleep('wait-for-personal-touch', '1m');
-
-    const sendResult = await step.run('send-whatsapp', async () => {
-      return await WhatsAppService.sendMessage(member.phone!, message);
-    });
-
-    await step.run('log-notification', async () => {
-      await db.insert(notificationLogs).values({
-        organizationId,
-        memberId,
-        type: 'WHATSAPP_AUTO',
-        status: sendResult.sent ? 'SENT' : 'FAILED',
-        content: message,
-        sentAt: new Date(),
+    if (member?.phone) {
+      await step.run('send-congrats', async () => {
+        const message = `Parabéns ${member.firstName}! Você concluiu o passo *${newStep.replace(/_/g, ' ')}* na jornada da *${churchName}*. Continue firme! ✨`;
+        await WhatsAppService.sendMessage(member.phone!, message);
       });
-    });
-
-    return { status: 'processed', sent: sendResult.sent };
+    }
   },
 );
 
 /**
- * Função Inngest que realiza o envio de mensagens em massa (Broadcast).
+ * Cron Job: Relatório Semanal de Atividades.
+ * Roda toda Segunda-feira às 08:00 AM (Brasília).
  */
-export const sendBroadcast = inngest.createFunction(
-  { id: 'send-broadcast', name: 'Comunicação: Envio em Massa' },
-  { event: 'notification/broadcast.send' },
-  async ({ event, step }) => {
-    const { organizationId, filters, message } = event.data;
-
-    const targetMembers = await step.run('fetch-targets', async () => {
-      const conditions = [eq(members.organizationId, organizationId)];
-      if (filters.currentStep) {
-        conditions.push(eq(members.currentStep, filters.currentStep));
-      }
-      if (filters.generationSlot) {
-        conditions.push(eq(members.generationSlot, Number(filters.generationSlot)));
-      }
-      return await db.select().from(members).where(and(...conditions));
+export const weeklyLeadershipReport = inngest.createFunction(
+  { id: "weekly-leadership-report", name: "Cron: Relatório Semanal" },
+  { cron: "0 11 * * 1" }, // 11:00 UTC = 08:00 AM Brasil (Segunda)
+  async ({ step }) => {
+    const orgs = await step.run("fetch-organizations", async () => {
+      return await db.selectDistinct({ id: members.organizationId }).from(members);
     });
 
-    const results = [];
-    for (const member of targetMembers) {
-      if (!member.phone) {
-        continue;
-      }
+    for (const org of orgs) {
+      const churchName = await step.run(`get-name-${org.id}`, async () => await getChurchName(org.id));
 
-      const res = await step.run(`send-to-${member.id}`, async () => {
-        const personalizedMessage = message.replace('{name}', member.firstName);
-        const sendRes = await WhatsAppService.sendMessage(member.phone!, personalizedMessage);
-
-        await db.insert(notificationLogs).values({
-          organizationId,
-          memberId: member.id,
-          type: 'WHATSAPP_BROADCAST',
-          status: sendRes.sent ? 'SENT' : 'FAILED',
-          content: personalizedMessage,
-          sentAt: new Date(),
-        });
-
-        return sendRes;
+      const summary = await step.run(`generate-summary-${org.id}`, async () => {
+        return await getWeeklySummary(org.id);
       });
 
-      results.push(res);
-      await step.sleep(`throttle-${member.id}`, '2s');
-    }
+      if (summary.stats.total > 0) {
+        const pastor = await step.run(`get-pastor-${org.id}`, async () => {
+          const [result] = await db
+            .select()
+            .from(members)
+            .where(and(eq(members.organizationId, org.id), isNull(members.leaderId)))
+            .limit(1);
+          return result;
+        });
 
-    return { total: targetMembers.length, processed: results.length };
-  },
+        if (pastor?.phone) {
+          await step.run(`send-report-${org.id}`, async () => {
+            const message = [
+              `📊 *RELATÓRIO SEMANAL: ${churchName.toUpperCase()}*`,
+              `Olá, Pastor! Aqui estão as atividades da última semana na sua igreja:`,
+              ``,
+              `✅ *Novos Membros:* ${summary.stats.creates}`,
+              `📈 *Promoções:* ${summary.stats.promotes}`,
+              `📝 *Atualizações:* ${summary.stats.updates}`,
+              `🗑️ *Exclusões:* ${summary.stats.deletes}`,
+              ``,
+              `Total de *${summary.stats.total}* ações realizadas.`,
+              ``,
+              `_Gerado por ${AppConfig.name}_`
+            ].join('\n');
+
+            await WhatsAppService.sendMessage(pastor.phone!, message);
+          });
+        }
+      }
+    }
+  }
+);
+
+/**
+ * Cron Job: Verificação diária de aniversariantes em 09:15 AM (Brasília).
+ */
+export const dailyBirthdayCheck = inngest.createFunction(
+  { id: "daily-birthday-check", name: "Cron: Parabéns Aniversariantes" },
+  { cron: "15 12 * * *" }, // 12:15 UTC = 09:15 AM Brasil
+  async ({ step }) => {
+    const membersList = await step.run("fetch-birthday-members", async () => {
+      const sql = (await import('drizzle-orm')).sql;
+      return await db.select().from(members).where(
+        sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`
+      );
+    });
+
+    for (const member of membersList) {
+      if (member.phone) {
+        const churchName = await step.run(`get-church-${member.id}`, async () => await getChurchName(member.organizationId));
+        await step.run(`send-birthday-msg-${member.id}`, async () => {
+          const msg = `Feliz aniversário, ${member.firstName}! 🎉 Toda a família *${churchName}* celebra a sua vida hoje. Que Deus te abençoe grandemente! ✨`;
+          await WhatsAppService.sendMessage(member.phone!, msg);
+        });
+      }
+    }
+  }
+);
+
+/**
+ * Ação de Transmissão (Broadcast).
+ */
+export const sendBroadcast = inngest.createFunction(
+  { id: 'send-broadcast', name: 'Comunicação: Transmissão em Massa' },
+  { event: 'broadcast/send' },
+  async ({ event, step }) => {
+    const { memberIds, message } = event.data;
+
+    for (const memberId of memberIds) {
+      const member = await step.run(`fetch-${memberId}`, async () => {
+        const [res] = await db.select().from(members).where(eq(members.id, memberId)).limit(1);
+        return res;
+      });
+
+      if (member?.phone) {
+        await step.run(`send-${memberId}`, async () => {
+          await WhatsAppService.sendMessage(member.phone!, message);
+        });
+        await step.sleep(`wait-${memberId}`, '2s'); // Throttling para evitar ban
+      }
+    }
+  }
 );

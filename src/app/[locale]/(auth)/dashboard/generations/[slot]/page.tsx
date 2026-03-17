@@ -1,7 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { db } from '@/libs/DB';
 import { getMembersByGenerationSlot } from '@/libs/services/MemberService';
-import { Shield, ArrowLeft, User, Phone, MessageCircle } from 'lucide-react';
+import { Shield, ArrowLeft, User, MessageCircle } from 'lucide-react';
 import { Link } from '@/libs/I18nNavigation';
 import { setRequestLocale } from 'next-intl/server';
 
@@ -11,6 +11,11 @@ export default async function GenerationPage(props: { params: Promise<{ slot: st
   setRequestLocale(locale);
 
   if (!orgId) return null;
+
+  // Busca Nome da Igreja
+  const client = await clerkClient();
+  const organization = await client.organizations.getOrganization({ organizationId: orgId });
+  const churchName = organization.name || 'Sua Igreja';
 
   const slotNumber = parseInt(slot);
   const members = await getMembersByGenerationSlot(orgId, slotNumber);
@@ -27,8 +32,8 @@ export default async function GenerationPage(props: { params: Promise<{ slot: st
             F{slot}
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Equipe Frente {slot}</h1>
-            <p className="text-sm text-slate-500 font-medium">Gestão horizontal de todos os discípulos posicionados no slot {slot}.</p>
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">Geração {slot}</h1>
+            <p className="text-sm text-slate-500 font-medium mt-2">Visualizando todos os integrantes posicionados na {slot}ª Geração da {churchName}.</p>
           </div>
         </div>
       </header>
@@ -68,7 +73,7 @@ export default async function GenerationPage(props: { params: Promise<{ slot: st
         {members.length === 0 && (
           <div className="col-span-full py-32 bg-white rounded-[3rem] border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-center px-6">
             <Shield size={48} className="text-slate-100 mb-4" />
-            <h3 className="text-lg font-black text-slate-400 uppercase tracking-widest">Ninguém posicionado nesta frente ainda</h3>
+            <h3 className="text-lg font-black text-slate-400 uppercase tracking-widest">Ninguém posicionado nesta geração ainda</h3>
           </div>
         )}
       </div>
