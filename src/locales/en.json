@@ -8,14 +8,14 @@
     "sign_up_link": "Sign up"
   },
   "BaseTemplate": {
-    "description": "Philadelphia Hub - Gestão da Visão G12 e Discipulado",
+    "description": "NextChurch - Gestão da Visão G12 e Discipulado",
     "footer_text": "© {year} {name}. Made with <author></author>.",
     "main_navigation_label": "Main navigation"
   },
   "Index": {
-    "meta_title": "Philadelphia Hub - Discipulado G12",
+    "meta_title": "NextChurch - Discipulado G12",
     "meta_description": "Sistema de gestão de discipulado hierárquico G12, acompanhamento da jornada de 7 passos e ministério Kids.",
-    "sponsors_title": "Parceiros do Philadelphia Hub",
+    "sponsors_title": "Parceiros do NextChurch",
     "zap_emoji_label": "Zap"
   },
   "Counter": {
@@ -33,15 +33,15 @@
     "count": "Count: {count}"
   },
   "About": {
-    "meta_title": "About - Philadelphia Hub",
+    "meta_title": "About - NextChurch",
     "meta_description": "Saiba mais sobre a nossa visão, valores e a estrutura de discipulado G12.",
-    "about_paragraph": "O Philadelphia Hub nasceu com a missão de cumprir o IDE de Jesus através do modelo G12. Somos uma comunidade focada no discipulado um a um, acreditando que cada membro é um líder em potencial, chamado para frutificar e consolidar a fé na nossa geração.",
+    "about_paragraph": "A Igreja Filadelfia nasceu com a missão de cumprir o IDE de Jesus através do modelo G12. Somos uma comunidade focada no discipulado um a um, acreditando que cada membro é um líder em potencial, chamado para frutificar e consolidar a fé na nossa geração.",
     "translation_powered_by": "Translation powered by"
   },
   "Portfolio": {
-    "meta_title": "Redes e Ministérios - Philadelphia Hub",
-    "meta_description": "Conheça as redes e ministérios que compõem o nosso Hub.",
-    "presentation": "No Philadelphia Hub, somos organizados em redes que atendem todas as faixas etárias e necessidades. De crianças a adultos, cada rede possui sua própria dinâmica de discipulado e crescimento, garantindo que ninguém caminhe sozinho.",
+    "meta_title": "Redes e Ministérios - NextChurch",
+    "meta_description": "Conheça as redes e ministérios que compõem o nosso ecossistema.",
+    "presentation": "Organizamos nossas redes para atender todas as faixas etárias e necessidades. De crianças a adultos, cada rede possui sua própria dinâmica de discipulado e crescimento, garantindo que ninguém caminhe sozinho.",
     "portfolio_name": "Rede {name}",
     "error_reporting_powered_by": "Error reporting powered by"
   },
@@ -62,14 +62,14 @@
   },
   "Dashboard": {
     "meta_title": "Dashboard",
-    "meta_description": "Philadelphia Hub - Painel de Controle de Discipulado",
+    "meta_description": "NextChurch - Painel de Controle de Discipulado",
     "hello_message": "Hello {email}!",
     "alternative_message": "Need advanced features? Multi-tenancy & Teams, Roles & Permissions, Shadcn UI, End-to-End Typesafety with oRPC, Stripe Payment, Light / Dark mode. Try <url></url>.",
     "max_message": "Or, need a Self-hosted auth stack (Better Auth)? Try <url></url>."
   },
   "UserProfile": {
     "meta_title": "User Profile",
-    "meta_description": "Gerencie seu perfil e preferências no Philadelphia Hub"
+    "meta_description": "Gerencie seu perfil e preferências no NextChurch"
   },
   "DashboardLayout": {
     "dashboard_link": "Dashboard",

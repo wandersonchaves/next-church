@@ -1,7 +1,7 @@
-# Philadelphia Hub - Instructional Context
+# NextChurch - Instructional Context
 
 ## Project Overview
-The **Philadelphia Hub** is a specialized Church Management System (CMS) built on the **G12 Discipleship Model** (1-12-144 hierarchy). It manages spiritual lineages, journey progress (7 steps), and children's ministries (Kids track).
+The **NextChurch** is a specialized Church Management System (CMS) built on the **G12 Discipleship Model** (1-12-144 hierarchy). It manages spiritual lineages, journey progress (7 steps), and children's ministries (Kids track).
 
 ### Core Stack
 - **Framework**: Next.js 15+ (App Router, Server Actions, RSC).
@@ -34,13 +34,13 @@ The **Philadelphia Hub** is a specialized Church Management System (CMS) built o
 
 ## Key Commands
 
-| Task | Command |
-| :--- | :--- |
-| **Development** | `npm run dev` |
-| **Production Build** | `npm run build` |
-| **Database Sync** | `npm run db:push` (Preferred over migrate in dev) |
+| Task                   | Command                                                           |
+| :--------------------- | :---------------------------------------------------------------- |
+| **Development**        | `npm run dev`                                                     |
+| **Production Build**   | `npm run build`                                                   |
+| **Database Sync**      | `npm run db:push` (Preferred over migrate in dev)                 |
 | **Inngest Dev Server** | `npx inngest-cli@latest dev -u http://localhost:3000/api/inngest` |
-| **Linting & A11y** | `npm run lint:fix` |
+| **Linting & A11y**     | `npm run lint:fix`                                                |
 
 ---
 

@@ -8,13 +8,13 @@
     "sign_up_link": "S'inscrire"
   },
   "BaseTemplate": {
-    "description": "Code de démarrage pour Next.js avec Tailwind CSS",
+    "description": "next-church - Gestion de la Vision G12 et Discipulat",
     "footer_text": "© {year} {name}. Fait avec <author></author>.",
     "main_navigation_label": "Navigation principale"
   },
   "Index": {
-    "meta_title": "Présentation de Next Church",
-    "meta_description": "Next Church est le code de démarrage parfait pour votre projet. Construisez votre application React avec le framework Next.js.",
+    "meta_title": "next-church - Discipulat G12",
+    "meta_description": "Système de gestion du discipulat hiérarchique G12, suivi du parcours en 7 étapes et ministère Kids.",
     "sponsors_title": "Partenaires",
     "zap_emoji_label": "Éclair"
   },
@@ -33,16 +33,16 @@
     "count": "Nombre : {count}"
   },
   "About": {
-    "meta_title": "A propos",
+    "meta_title": "A propos - next-church",
     "meta_description": "A propos description",
-    "about_paragraph": "Bienvenue sur notre page À propos ! Nous sommes une équipe de passionnés et dévoués à la création de logiciels.",
+    "about_paragraph": "L'Église Filadelfia est née avec la mission d'accomplir l'ordre suprême de Jésus à travers le modèle G12. Nous sommes une communauté axée sur le discipulat un à un.",
     "translation_powered_by": "Traduction propulsée par"
   },
   "Portfolio": {
-    "meta_title": "Portfolio",
+    "meta_title": "Portfolio - next-church",
     "meta_description": "Bienvenue sur la page de mon portfolio !",
-    "presentation": "Bienvenue sur ma page portfolio ! Vous trouverez ici une collection soigneusement organisée de mon travail et de mes réalisations. À travers ce portfolio, je mets en valeur mon expertise, ma créativité et la valeur que je peux apporter à vos projets.",
-    "portfolio_name": "Portfolio {name}",
+    "presentation": "Nous organisons nos réseaux pour répondre à tous les groupes d'âge et besoins. Des enfants aux adultes, chaque réseau a sa propre dynamique de discipulat.",
+    "portfolio_name": "Réseau {name}",
     "error_reporting_powered_by": "Rapport d'erreur propulsé par"
   },
   "PortfolioSlug": {

@@ -1,21 +1,20 @@
 services:
-  db:
+  database:
     image: postgres:17-alpine
-    container_name: philadelphia-hub-db
-    restart: always
+    container_name: next-church-db
+    ports:
+      - 5432:5432
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: philadelphia_hub
-    ports:
-      - '5432:5432'
+      POSTGRES_DB: next_church
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - local_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U user -d philadelphia_hub]
+      test: [CMD-SHELL, pg_isready -U user -d next_church]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
-  postgres_data:
+  local_db_data:

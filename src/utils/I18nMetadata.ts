@@ -38,7 +38,7 @@ export async function getI18nMetadata(
 
     return {
       title: AppConfig.name,
-      description: 'Philadelphia Hub - Gestão G12',
+      description: 'NextChurch - Gestão G12',
     };
   }
 }

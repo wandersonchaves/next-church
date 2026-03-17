@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getI18nMetadata } from '@/utils/I18nMetadata';
 import { Quote, Crown, Users } from 'lucide-react';
+import { AppConfig } from '@/utils/AppConfig';
 
 type AboutPageProps = {
   params: Promise<{ locale: string }>;
@@ -32,12 +33,12 @@ export default async function About(props: AboutPageProps) {
             "{t('about_paragraph')}"
           </blockquote>
           <div className="flex flex-col items-center gap-3 pt-6">
-            <div className="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-xl shadow-slate-200">
-              PH
+            <div className="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-xl shadow-slate-200 uppercase">
+              NC
             </div>
             <div className="text-center">
               <p className="font-black text-slate-900 uppercase tracking-tighter">Wanderson Chaves</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Idealizador, Philadelphia Hub</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Idealizador, {AppConfig.name}</p>
             </div>
           </div>
         </div>

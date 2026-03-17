@@ -1,7 +1,8 @@
 import { enUS, frFR } from '@clerk/localizations';
 
 export const AppConfig = {
-  name: 'Philadelphia Hub',
+  name: 'NextChurch',
+  technicalName: 'next-church',
   locales: ['en', 'fr'],
   defaultLocale: 'en',
   localePrefix: 'as-needed' as const,
