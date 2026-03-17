@@ -6,17 +6,15 @@ import { z } from 'zod';
 
 const InviteSchema = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum(['org:admin', 'org:member']).default('org:member'),
+  role: z.enum(['org:admin', 'org:member']),
+  locale: z.string(),
+  origin: z.string().optional(), // Recebido do cliente
 });
 
-/**
- * Envia um convite oficial do Clerk para um novo membro da equipe.
- */
 export async function sendTeamInviteAction(data: z.infer<typeof InviteSchema>) {
   const { orgId, orgRole } = await auth();
   const client = await clerkClient();
 
-  // Segurança: Apenas admins podem convidar
   if (!orgId || orgRole !== 'org:admin') {
     return { error: "Apenas administradores podem convidar novos membros." };
   }
@@ -25,29 +23,34 @@ export async function sendTeamInviteAction(data: z.infer<typeof InviteSchema>) {
   if (!validated.success) return { error: "Dados inválidos" };
 
   try {
+    // 1. Definimos a URL absoluta. 
+    // Prioridade: Origin enviado pelo cliente > Env Var > Fallback Localhost
+    const baseUrl = validated.data.origin || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    
+    // IMPORTANTE: A URL deve ser absoluta para o Clerk não tentar resolver no domínio dele
+    const redirectUrl = `${baseUrl}/${validated.data.locale}/dashboard`;
+
     await client.organizations.createOrganizationInvitation({
       organizationId: orgId,
       emailAddress: validated.data.email,
       role: validated.data.role,
-      // O link de redirecionamento após o cadastro
-      redirectUrl: `${process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/dashboard'}`,
+      redirectUrl: redirectUrl, 
     });
 
     revalidatePath('/[locale]/dashboard/team', 'page');
     return { success: true };
   } catch (e: any) {
-    console.error(e);
-    // Erro comum: usuário já convidado
-    if (e?.errors?.[0]?.code === 'already_invited') {
-      return { error: "Este e-mail já possui um convite pendente." };
-    }
-    return { error: "Falha ao enviar convite. Verifique se o e-mail está correto." };
+    console.error('--- CLERK INVITE ERROR DETAILS ---');
+    console.error(JSON.stringify(e.errors, null, 2));
+    
+    const firstError = e.errors?.[0];
+    if (firstError?.code === 'already_invited') return { error: "Este e-mail já possui um convite pendente." };
+    if (firstError?.code === 'form_identifier_exists') return { error: "Este usuário já é membro desta igreja." };
+
+    return { error: firstError?.message || "Falha ao enviar convite." };
   }
 }
 
-/**
- * Revoga um convite pendente.
- */
 export async function revokeInviteAction(invitationId: string) {
   const { orgId, orgRole } = await auth();
   const client = await clerkClient();

@@ -6,10 +6,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserPlus, Mail, Loader2, CheckCircle2 } from 'lucide-react';
 import { sendTeamInviteAction } from './actions';
+import { useParams } from 'next/navigation';
 
 const InviteSchema = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum(['org:admin', 'org:member']), // Removido .default() para evitar conflito de tipagem
+  role: z.enum(['org:admin', 'org:member']),
 });
 
 type InviteInput = z.infer<typeof InviteSchema>;
@@ -17,6 +18,9 @@ type InviteInput = z.infer<typeof InviteSchema>;
 export default function TeamForm() {
   const [isSuccess, setIsSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const params = useParams();
+  const locale = (params?.locale as string) || 'en';
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<InviteInput>({
     resolver: zodResolver(InviteSchema),
@@ -28,7 +32,16 @@ export default function TeamForm() {
 
   const onSubmit: SubmitHandler<InviteInput> = async (data) => {
     setError(null);
-    const res = await sendTeamInviteAction(data);
+
+    // Capturamos a URL base atual (localhost ou railway)
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+    const res = await sendTeamInviteAction({
+      ...data,
+      locale,
+      origin // Enviamos o origin para a action
+    });
+
     if (res.success) {
       setIsSuccess(true);
       reset();
