@@ -1,7 +1,7 @@
 'use client';
 
 import { OrganizationSwitcher, SignOutButton, UserButton } from '@clerk/nextjs';
-import { Globe, LayoutDashboard, LogOut, Menu, Send, X } from 'lucide-react';
+import { Briefcase, Globe, LayoutDashboard, LogOut, Menu, Send, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
@@ -13,6 +13,7 @@ export const GlobalHeader = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Ministérios', href: '/dashboard/ministries', icon: Briefcase },
     { name: 'Comunicação', href: '/dashboard/communication', icon: Send },
   ];
 
