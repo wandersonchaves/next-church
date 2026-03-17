@@ -1,146 +1,156 @@
-import type { Metadata } from 'next';
 import { auth } from '@clerk/nextjs/server';
-import { Baby, Backpack, BookOpen, GraduationCap, Info, LayoutDashboard, Plus, Search, Send, Target, Users } from 'lucide-react';
-import { setRequestLocale } from 'next-intl/server';
-import { StatCard } from '@/components/Dashboard/StatCard';
+import { getG12Hierarchy, getG12Stats, getStatsByGeneration } from '@/libs/services/MemberService';
 import { G12TreeView } from '@/components/G12TreeView';
+import { StatCard } from '@/components/Dashboard/StatCard';
+import { Alert } from '@/components/Dashboard/Alert';
+import {
+  Users, UserPlus, Target, Flame,
+  Search, Shield, Crown, TrendingUp,
+  Layers, ChevronRight
+} from 'lucide-react';
 import { Link } from '@/libs/I18nNavigation';
-import { getFilteredG12Hierarchy, getG12Stats } from '@/libs/services/MemberService';
-import { getI18nMetadata } from '@/utils/I18nMetadata';
-import { buildG12Tree } from '@/utils/TreeUtils';
+import { setRequestLocale } from 'next-intl/server';
 
-type DashboardPageProps = {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<{ q?: string; step?: string }>;
-};
-
-export async function generateMetadata(props: DashboardPageProps): Promise<Metadata> {
-  return getI18nMetadata('Dashboard', props.params);
-}
-
-export default async function DashboardPage(props: DashboardPageProps) {
+export default async function DashboardPage(props: { params: Promise<{ locale: string }> }) {
   const { locale } = await props.params;
-  const { q, step } = await props.searchParams;
   const { orgId } = await auth();
   setRequestLocale(locale);
 
-  if (!orgId) {
-    return null;
-  }
+  if (!orgId) return null;
 
-  const [flatData, statsData] = await Promise.all([
-    getFilteredG12Hierarchy(orgId, q, step),
+  // Busca paralela para máxima performance
+  const [hierarchy, stats, genStats] = await Promise.all([
+    getG12Hierarchy(orgId),
     getG12Stats(orgId),
+    getStatsByGeneration(orgId)
   ]);
 
-  const treeData = buildG12Tree(flatData);
-  const totalMembers = statsData.reduce((acc, s) => acc + Number(s.count), 0);
+  const totalMembers = hierarchy.length;
+  const encounterCount = stats.find(s => s.current_step === 'ENCOUNTER')?.count || 0;
+  const sendingCount = stats.find(s => s.current_step === 'SENDING')?.count || 0;
 
   return (
-    <div className="space-y-6 p-4 lg:space-y-10 lg:p-10">
-      <div className="mx-auto max-w-400 space-y-6 lg:space-y-10">
+    <div className="p-4 lg:p-10 space-y-10 bg-[#F8FAFC] min-h-screen font-sans">
 
-        {/* BARRA DE FILTROS E PESQUISA: Stack em Mobile */}
-        <div className="flex flex-col items-stretch justify-between gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm lg:gap-6 lg:rounded-[2.5rem] lg:p-6 xl:flex-row xl:items-center">
-          <div className="flex items-center gap-3">
-            <LayoutDashboard className="h-5 w-5 text-blue-600 lg:h-6 lg:w-6" />
-            <h2 className="text-sm leading-none font-black tracking-widest text-slate-800 uppercase">Painel</h2>
-            <span className="mx-1 h-1 w-1 rounded-full bg-slate-200 lg:mx-2" />
-            <p className="truncate text-[10px] font-bold tracking-widest text-slate-400 uppercase">
-              {totalMembers}
-              {' '}
-              Membros
-            </p>
-          </div>
-
-          <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row xl:w-auto">
-            <form className="group relative flex-1 xl:w-80">
-              <Search size={16} className="absolute top-1/2 left-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-600" />
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Buscar linhagem..."
-                className="w-full rounded-xl border-none bg-slate-50 py-2.5 pr-4 pl-10 text-sm font-bold text-slate-700 transition-all outline-none focus:ring-4 focus:ring-blue-500/5"
-              />
-            </form>
-            <Link
-              href="/dashboard/members/new"
-              className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-2.5 text-xs font-black tracking-widest text-white uppercase shadow-lg transition-all hover:bg-blue-600 active:scale-95"
-            >
-              <Plus size={16} />
-              {' '}
-              Novo Membro
-            </Link>
-          </div>
-        </div>
-
-        {/* STATS AREA: Grid Responsivo Real (Fase 6) */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[4fr_1fr] lg:gap-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:gap-6">
-            <StatCard icon={<Target size={24} />} label="Encontro" value={statsData.find(s => s.current_step === 'ENCOUNTER')?.count || 0} color="purple" active={step === 'ENCOUNTER'} />
-            <StatCard icon={<Send size={24} />} label="Enviados" value={statsData.find(s => s.current_step === 'SENDING')?.count || 0} color="emerald" active={step === 'SENDING'} />
-            <StatCard icon={<Users size={24} />} label="Total" value={totalMembers} color="blue" />
-          </div>
-
-          <div className="flex flex-row items-center gap-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-xl lg:flex-col lg:justify-center lg:gap-2 lg:rounded-[2.5rem]">
-            <div className="rounded-xl bg-pink-50 p-3">
-              <Baby size={20} className="text-pink-500" />
+      {/* 1. KPIs DE IMPACTO */}
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Total de Membros" value={totalMembers} icon={Users} color="bg-slate-900" trend="+12% este mês" />
+        <StatCard title="No Encontro" value={encounterCount} icon={Flame} color="bg-orange-500" />
+        <StatCard title="Enviados" value={sendingCount} icon={Target} color="bg-emerald-600" />
+        <Link href="/dashboard/members/new" className="group">
+          <div className="h-full p-6 bg-white border-2 border-dashed border-blue-200 rounded-4xl flex flex-col items-center justify-center gap-3 hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 group-active:scale-95">
+            <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <UserPlus size={24} />
             </div>
-            <div className="flex flex-col lg:items-center">
-              <span className="text-3xl font-bold tracking-tighter text-slate-900 lg:text-4xl">0</span>
-              <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Kids Hub</span>
-            </div>
+            <span className="text-sm font-black text-blue-600 uppercase tracking-widest">Novo Membro</span>
           </div>
-        </div>
+        </Link>
+      </section>
 
-        {/* LOWER AREA: Sidebar empilha abaixo no Mobile */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-10">
-          <main className="order-2 lg:order-1 lg:col-span-8 xl:col-span-9">
-            <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-2xl shadow-slate-200/50 lg:rounded-[3rem]">
-              <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/30 px-6 py-6 lg:px-10">
-                <h2 className="text-xs font-black tracking-widest text-slate-800 uppercase lg:text-sm">Linhagem G12</h2>
-                {(q || step) && (
-                  <Link href="/dashboard" className="rounded-full bg-slate-100 px-3 py-1.5 text-[9px] font-black text-slate-500 uppercase">
-                    Limpar
-                  </Link>
-                )}
-              </div>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
 
-              <div className="p-2 lg:p-8">
-                {treeData.length > 0
-                  ? (
-                      <G12TreeView data={treeData} />
-                    )
-                  : (
-                      <div className="px-4 py-20 text-center lg:py-32">
-                        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-dashed border-blue-100 bg-blue-50 text-blue-200 lg:h-24 lg:w-24 lg:rounded-[2.5rem]">
-                          <Users size={32} />
-                        </div>
-                        <h3 className="text-lg font-black text-slate-800 uppercase lg:text-xl">Inicie sua Linhagem</h3>
-                        <p className="mx-auto mt-2 max-w-xs text-xs text-slate-400 lg:text-sm">Cadastre o Pastor Principal para começar.</p>
+        {/* 2. GESTÃO POR GERAÇÃO (Slicing Horizontal) */}
+        <section className="xl:col-span-1 space-y-6">
+          <div className="flex items-center gap-3 px-2">
+            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Layers size={20} /></div>
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight italic">Frentes de Trabalho</h2>
+          </div>
+
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
+            <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Distribuição G12</span>
+              <Shield size={16} className="text-slate-300" />
+            </div>
+            <div className="divide-y divide-slate-50">
+              {Array.from({ length: 12 }, (_, i) => {
+                const slot = i + 1;
+                const count = genStats.find(s => s.slot === slot)?.count || 0;
+                return (
+                  <Link
+                    key={slot}
+                    href={`/dashboard/generations/${slot}`}
+                    className="flex items-center justify-between p-5 hover:bg-slate-50 transition-colors group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${count > 0 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>
+                        F{slot}
                       </div>
-                    )}
-              </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-700">Equipe Frente {slot}</p>
+                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">{count} integrantes na rede</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                  </Link>
+                );
+              })}
             </div>
-          </main>
+          </div>
+        </section>
 
-          <aside className="order-1 space-y-6 lg:order-2 lg:col-span-4 xl:col-span-3">
-            <div className="space-y-4 rounded-2xl border border-slate-200/60 bg-white p-6 shadow-xl lg:rounded-[3rem] lg:p-8">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600"><Info size={18} /></div>
-                <h3 className="text-[10px] font-black tracking-widest text-slate-800 uppercase lg:text-xs">Classes Kids</h3>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-                <StatCard icon={<Baby size={16} />} label="Bercário" value={0} color="pink" size="compact" />
-                <StatCard icon={<BookOpen size={16} />} label="Maternal" value={0} color="rose" size="compact" />
-                <StatCard icon={<Backpack size={16} />} label="Kids 1" value={0} color="orange" size="compact" />
-                <StatCard icon={<GraduationCap size={16} />} label="Juniores" value={0} color="indigo" size="compact" />
-              </div>
+        {/* 3. LINHAGEM COMPLETA (Visualização Vertical) */}
+        <section className="xl:col-span-2 space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-100 text-amber-600 rounded-xl"><Crown size={20} /></div>
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight italic">Mapa de Linhagem</h2>
             </div>
-          </aside>
-        </div>
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                type="text"
+                placeholder="Buscar na rede..."
+                className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500/20 transition-all shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl p-6 md:p-8 relative">
+            <G12TreeView data={hierarchy as any} />
+            <div className="absolute bottom-8 right-8 flex items-center gap-2 px-4 py-2 bg-slate-900/80 backdrop-blur-md text-white rounded-full text-[9px] font-black uppercase tracking-[0.2em] shadow-xl">
+              <TrendingUp size={12} className="text-emerald-400" /> Visão 1-12-144 Ativa
+            </div>
+          </div>
+        </section>
+
       </div>
+
+      {/* 4. HUB DE KIDs (Mini Dashboard) */}
+      <section className="bg-white rounded-[3rem] border border-slate-200 shadow-xl p-8 md:p-12 overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-50" />
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-10">
+          <div className="space-y-4 text-center md:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-widest">
+              Próxima Geração
+            </div>
+            <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">Philadelphia Kids Hub</h2>
+            <p className="text-slate-500 font-medium max-w-md">Gerencie as classes de Bercário, Maternal, Kids e Juniores com a mesma precisão do G12.</p>
+            <div className="pt-4">
+              <Link href="/dashboard/ministries" className="px-8 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl inline-block">
+                Acessar Classes Kids
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
+            {[
+              { label: 'Bercário', count: 0 },
+              { label: 'Maternal', count: 0 },
+              { label: 'Kids 1', count: 0 },
+              { label: 'Juniores', count: 0 }
+            ].map((cls) => (
+              <div key={cls.label} className="p-6 bg-slate-50 rounded-4xl border border-slate-100 flex flex-col items-center gap-1 group hover:bg-white hover:shadow-lg transition-all border-b-4 border-b-blue-200">
+                <span className="text-2xl font-black text-slate-900">{cls.count}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cls.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="py-10 text-center">
+        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">Philadelphia Hub • G12 Vision Management</p>
+      </footer>
     </div>
   );
 }

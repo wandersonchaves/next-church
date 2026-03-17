@@ -1,19 +1,14 @@
 'use client';
 
-import type { G12Node } from '@/libs/services/MemberService';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import {
-  ArrowUpCircle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Crown,
-  Maximize2,
-  Shield,
-  User,
-} from 'lucide-react';
 import * as React from 'react';
+import type { G12Node } from '@/libs/services/MemberService';
+import {
+  ChevronDown, ChevronRight, Maximize2, Crown, Shield,
+  CheckCircle2, ArrowUpCircle, User, Search
+} from 'lucide-react';
 import { completeJourneyStepAction } from '@/app/[locale]/(auth)/dashboard/members/actions';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Link } from '@/libs/I18nNavigation';
 
 const stepColors: Record<string, string> = {
   DECISION: 'bg-slate-100 text-slate-600',
@@ -27,18 +22,13 @@ const stepColors: Record<string, string> = {
 
 const stepsOrder = ['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'];
 
-// Helper para coletar IDs iniciais (Fatorado para fora para ser usado no Lazy Init)
 const getInitialExpandedIds = (nodes: G12Node[], limit: number): Set<string> => {
   const ids = new Set<string>();
   const collect = (list: G12Node[], l: number) => {
-    if (l <= 0) {
-      return;
-    }
-    list.forEach((n) => {
+    if (l <= 0 || !list) return;
+    list.forEach(n => {
       ids.add(n.id);
-      if (n.children) {
-        collect(n.children, l - 1);
-      }
+      if (n.children) collect(n.children, l - 1);
     });
   };
   collect(nodes, limit);
@@ -46,24 +36,23 @@ const getInitialExpandedIds = (nodes: G12Node[], limit: number): Set<string> => 
 };
 
 const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
-  node: G12Node;
-  depth: number;
-  isOpen: boolean;
-  onToggle: () => void;
-  onPromote: (node: G12Node) => void;
-  loading: boolean;
+  node: G12Node,
+  depth: number,
+  isOpen: boolean,
+  onToggle: () => void,
+  onPromote: (node: G12Node) => void,
+  loading: boolean
 }) => {
-  const hasChildren = node.children.length > 0;
+  // Garantia de segurança: node.children pode ser undefined
+  const children = node.children || [];
+  const hasChildren = children.length > 0;
+
   const currentIdx = stepsOrder.indexOf(node.currentStep);
   const nextStep = currentIdx < stepsOrder.length - 1 ? stepsOrder[currentIdx + 1] : null;
 
   const getLabel = () => {
-    if (node.level === 1) {
-      return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
-    }
-    if (!node.generationSlot) {
-      return { text: 'PENDENTE', color: 'border-slate-300 text-slate-400', icon: <User size={16} /> };
-    }
+    if (node.level === 1) return { text: 'LIDERANÇA', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
+    if (!node.generationSlot) return { text: 'PENDENTE', color: 'border-slate-300 text-slate-400', icon: <User size={16} /> };
     return { text: `F${node.generationSlot}`, color: 'border-blue-500 text-blue-600', icon: <Shield size={16} /> };
   };
 
@@ -72,50 +61,46 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
   return (
     <div
       className={`
-        group flex items-center gap-3 rounded-2xl border p-3 transition-all duration-200
-        ${isOpen ? 'border-blue-100 bg-white shadow-md' : 'border-slate-100 bg-white/40 hover:border-slate-200'}
+        flex items-center gap-3 p-3 rounded-2xl border transition-all duration-200 group
+        ${isOpen ? 'bg-white shadow-md border-blue-100' : 'bg-white/40 border-slate-100 hover:border-slate-200'}
         mb-2
       `}
       style={{ marginLeft: `${Math.min(depth * 16, 64)}px` }}
     >
-      <div className={`shrink-0 rounded-xl p-2 ${isOpen ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-400'}`}>
+      <div className={`shrink-0 p-2 rounded-xl ${isOpen ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-400'}`}>
         {label.icon}
       </div>
 
       <div
-        className="min-w-0 flex-1 cursor-pointer outline-none"
+        className="flex-1 min-w-0 cursor-pointer outline-none"
         onClick={onToggle}
-        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onToggle()}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onToggle()}
         role="button"
         tabIndex={0}
       >
         <div className="flex items-center gap-2">
-          <p className={`truncate text-sm leading-none font-bold ${!node.generationSlot ? 'text-slate-400' : 'text-slate-800'}`}>
-            {node.firstName}
-            {' '}
-            {node.lastName}
+          <p className={`text-sm font-bold truncate leading-none ${!node.generationSlot ? 'text-slate-400' : 'text-slate-800'}`}>
+            {node.firstName} {node.lastName}
           </p>
-          <span className={`rounded border px-1 text-[8px] font-black tracking-tighter uppercase ${label.color}`}>
+          <span className={`text-[8px] font-black uppercase tracking-tighter border px-1 rounded ${label.color}`}>
             {label.text}
           </span>
         </div>
 
         <div className="mt-1 flex items-center gap-2">
-          <span className={`rounded-md px-1.5 py-0.5 text-[8px] font-black tracking-widest uppercase ${stepColors[node.currentStep]}`}>
-            {node.currentStep.replace(/_/g, ' ')}
+          <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${stepColors[node.currentStep]}`}>
+            {node.currentStep?.replace(/_/g, ' ') || 'DECISION'}
           </span>
           {hasChildren && (
-            <span className="flex items-center gap-1 text-[8px] font-bold text-slate-400">
+            <span className="text-[8px] font-bold text-slate-400 flex items-center gap-1">
               {isOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              {node.children.length}
-              {' '}
-              disc.
+              {children.length} disc.
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {nextStep && (
           <button
             onClick={(e) => {
@@ -123,36 +108,45 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
               onPromote(node);
             }}
             disabled={loading}
-            className="rounded-lg p-1.5 text-slate-300 transition-all hover:bg-blue-50 hover:text-blue-600"
+            className="p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
           >
             {loading ? <ArrowUpCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
           </button>
         )}
-        <button className="rounded-lg p-1.5 text-slate-300 transition-all hover:bg-slate-50 hover:text-slate-900">
+        <Link
+          href={`/dashboard/networks/${node.id}`}
+          className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+        >
+          <Search size={14} />
+        </Link>
+        <Link
+          href={`/dashboard/members/${node.id}/edit`}
+          className="p-1.5 text-slate-300 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all"
+        >
           <Maximize2 size={14} />
-        </button>
+        </Link>
       </div>
     </div>
   );
 };
 
 export const G12TreeView = ({ data }: { data: G12Node[] }) => {
-  // Inicialização Preguiçosa (Lazy Initial State) para evitar re-execução do useEffect
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => getInitialExpandedIds(data, 2));
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => getInitialExpandedIds(data || [], 2));
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
   const parentRef = React.useRef<HTMLDivElement>(null);
 
   const flattenedData = React.useMemo(() => {
     const flattened: { node: G12Node; depth: number }[] = [];
     const recurse = (nodes: G12Node[], depth: number) => {
-      nodes.forEach((node) => {
+      if (!nodes) return;
+      nodes.forEach(node => {
         flattened.push({ node, depth });
         if (expandedIds.has(node.id) && node.children && node.children.length > 0) {
           recurse(node.children, depth + 1);
         }
       });
     };
-    recurse(data, 0);
+    recurse(data || [], 0);
     return flattened;
   }, [data, expandedIds]);
 
@@ -164,13 +158,10 @@ export const G12TreeView = ({ data }: { data: G12Node[] }) => {
   });
 
   const toggleNode = (id: string) => {
-    setExpandedIds((prev) => {
+    setExpandedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -179,9 +170,7 @@ export const G12TreeView = ({ data }: { data: G12Node[] }) => {
     const steps = ['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'];
     const currentIdx = steps.indexOf(node.currentStep);
     const nextStep = steps[currentIdx + 1];
-    if (!nextStep) {
-      return;
-    }
+    if (!nextStep) return;
     setLoadingId(node.id);
     await completeJourneyStepAction({ memberId: node.id, step: nextStep });
     setLoadingId(null);
@@ -190,7 +179,7 @@ export const G12TreeView = ({ data }: { data: G12Node[] }) => {
   return (
     <div
       ref={parentRef}
-      className="custom-scrollbar relative h-150 overflow-y-auto lg:h-200"
+      className="h-150 lg:h-200 relative overflow-y-auto custom-scrollbar"
     >
       <div
         style={{
@@ -201,9 +190,7 @@ export const G12TreeView = ({ data }: { data: G12Node[] }) => {
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const item = flattenedData[virtualRow.index];
-          if (!item) {
-            return null;
-          }
+          if (!item) return null;
 
           return (
             <div
