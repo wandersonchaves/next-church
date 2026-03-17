@@ -1,22 +1,46 @@
 import { db } from '@/libs/DB';
-import { members } from '@/models/Schema';
+import { ministries } from '@/models/Schema';
+import { eq } from 'drizzle-orm';
 
 /**
- * Insere um líder raiz para teste.
- * @param orgId - O ID da Organização do Clerk
+ * Módulo de Inicialização (Seed) para novas Organizações.
+ * Cria os ministérios básicos e configura o ambiente.
  */
-export async function seedRootLeader(orgId: string) {
-  const result = await db.insert(members).values({
-    organizationId: orgId,
-    firstName: 'Pastor',
-    lastName: 'Presidente',
-    email: 'contato@igreja.com',
-    phone: '11999999999',
-    birthDate: new Date('1980-01-01'),
-    gender: 'M',
-    currentStep: 'SENDING',
-    isLeader: true,
-  }).returning();
+export const SeedService = {
+  /**
+   * Inicializa uma organização com dados padrão se ela estiver vazia.
+   */
+  async initializeOrganization(orgId: string) {
+    // 1. Verifica se já existem ministérios
+    const existing = await db
+      .select()
+      .from(ministries)
+      .where(eq(ministries.organizationId, orgId))
+      .limit(1);
 
-  return result[0];
-}
+    if (existing.length > 0) return;
+
+    // 2. Ministérios Padrão
+    const defaultMinistries = [
+      { name: 'Louvor & Adoração', description: 'Equipe responsável pela música e ambiente de adoração.' },
+      { name: 'Mídia & Produção', description: 'Som, projeção, redes sociais e transmissão.' },
+      { name: 'Filadelfia Kids', description: 'Ensino bíblico e cuidado para a próxima geração.' },
+      { name: 'Consolidação', description: 'Acolhimento e acompanhamento de novos decididos.' },
+      { name: 'Intercessão', description: 'Cobertura espiritual e reuniões de oração.' },
+      { name: 'Apoio & Logística', description: 'Organização, limpeza e recepção.' },
+    ];
+
+    try {
+      await db.insert(ministries).values(
+        defaultMinistries.map(m => ({
+          organizationId: orgId,
+          name: m.name,
+          description: m.description,
+        }))
+      );
+      console.log(`[SEED] Org ${orgId} inicializada com ministérios padrão.`);
+    } catch (e) {
+      console.error(`[SEED_ERROR] Erro ao inicializar org ${orgId}:`, e);
+    }
+  }
+};
