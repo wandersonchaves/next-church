@@ -18,62 +18,62 @@ export default async function Layout(props: {
   return (
     <BaseTemplate
       leftNav={(
-        <>
+        <div className="flex items-center gap-x-10">
           <li>
-            <Link href="/" className="border-none text-gray-700 hover:text-gray-900">
+            <Link href="/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
               {t('home_link')}
             </Link>
           </li>
           <li>
-            <Link href="/about/" className="border-none text-gray-700 hover:text-gray-900">
+            <Link href="/about/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
               {t('about_link')}
             </Link>
           </li>
           <li>
-            <Link href="/portfolio/" className="border-none text-gray-700 hover:text-gray-900">
+            <Link href="/portfolio/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
               {t('portfolio_link')}
             </Link>
           </li>
-          {/* Link dinâmico para Dashboard apenas se logado */}
           <SignedIn>
             <li>
-              <Link href="/dashboard/" className="border-none font-bold text-blue-600 hover:text-blue-800">
-                Dashboard
+              <Link href="/dashboard/" className="text-sm font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-widest">
+                Painel
               </Link>
             </li>
           </SignedIn>
-        </>
+        </div>
       )}
       rightNav={(
-        <div className="flex items-center gap-x-5">
-          {/* Se NÃO logado: mostra Sign in / Sign up */}
+        <div className="flex items-center gap-x-8">
           <SignedOut>
             <li>
-              <Link href="/sign-in/" className="border-none text-gray-700 hover:text-gray-900">
+              <Link href="/sign-in/" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
                 {t('sign_in_link')}
               </Link>
             </li>
             <li>
-              <Link href="/sign-up/" className="border-none text-gray-700 hover:text-gray-900">
+              <Link
+                href="/sign-up/"
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+              >
                 {t('sign_up_link')}
               </Link>
             </li>
           </SignedOut>
 
-          {/* Se logado: mostra o Botão de Perfil do Usuário */}
           <SignedIn>
             <li>
-              <UserButton appearance={{ elements: { userButtonAvatarBox: 'w-8 h-8' } }} />
+              <UserButton appearance={{ elements: { userButtonAvatarBox: 'w-10 h-10 shadow-md' } }} />
             </li>
           </SignedIn>
 
-          <li>
+          <li className="border-l border-slate-100 pl-6">
             <LocaleSwitcher />
           </li>
         </div>
       )}
     >
-      <div className="py-5 text-xl [&_p]:my-6">{props.children}</div>
+      <div className="py-10">{props.children}</div>
     </BaseTemplate>
   );
 }
