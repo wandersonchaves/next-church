@@ -105,3 +105,18 @@ export const journeyHistory = pgTable('journey_history', {
   completedAt: timestamp('completed_at', { mode: 'date' }).defaultNow().notNull(),
   notes: text('notes'),
 });
+
+// Tabela de Logs de Auditoria
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: varchar('organization_id', { length: 255 }).notNull(),
+  userId: varchar('user_id', { length: 255 }).notNull(), // ID do Clerk
+  userName: text('user_name').notNull(),
+  action: varchar('action', { length: 50 }).notNull(), // CREATE, UPDATE, DELETE
+  entityType: varchar('entity_type', { length: 50 }).notNull(), // MEMBER, MINISTRY, etc.
+  entityName: text('entity_name'), // Nome do membro ou ministério para facilitar leitura
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index('audit_org_idx').on(table.organizationId),
+  index('audit_created_idx').on(table.createdAt),
+]);
