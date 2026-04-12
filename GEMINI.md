@@ -1,67 +1,66 @@
 # NextChurch - Instructional Context
 
 ## Project Overview
-The **NextChurch** is a specialized Church Management System (CMS) built on the **G12 Discipleship Model** (1-12-144 hierarchy). It manages spiritual lineages, journey progress (7 steps), and children's ministries (Kids track).
+**NextChurch** (technical: `next-church`) is an enterprise-grade Church Management System (CMS) tailored for the **G12 Discipleship Model** (1-12-144 hierarchy). It provides a white-label experience where each organization (Church) manages its own spiritual lineage, journey progress, ministries, and automated communications.
 
 ### Core Stack
 - **Framework**: Next.js 15+ (App Router, Server Actions, RSC).
-- **ORM/DB**: Drizzle ORM with PostgreSQL (Real Postgres via Docker/Railway).
-- **Auth/Multitenancy**: Clerk (Organizations-based isolation).
-- **Background Tasks**: Inngest (Event-driven workflows for notifications and cron jobs).
-- **Messaging**: Evolution API (WhatsApp integration).
+- **ORM/DB**: Drizzle ORM with PostgreSQL (Transactional & Resilient).
+- **Auth/Multitenancy**: Clerk (Organizations-based isolation with Invitation Workflow).
+- **Background Tasks**: Inngest (Event-driven workflows, Cron jobs, Throttling).
+- **Messaging**: Evolution API (WhatsApp integration for automated reports and greetings).
 - **Security**: Arcjet (Bot protection & Shield).
-- **UI**: Tailwind CSS 4 + Lucide Icons (High-density BI design).
+- **UI**: Tailwind CSS 4 + Lucide Icons (Enterprise SaaS "Clean" aesthetic).
 
 ---
 
 ## Architectural Principles
 
 ### 1. Data Modeling (Hierarchy & Lineage)
-- **Hybrid Strategy**: Uses both **Adjacency List** (`leader_id`) and **Materialized Path** (`lineage` column as string `id.id.id`).
-- **DFS Ordering**: Hierarchical queries MUST use the `sort_path` array (generated via Recursive CTE) to ensure disciples appear immediately below their leaders in UI and Selects.
-- **Generation Slots**: Members are assigned to a specific "Slot" (**F1 to F12**), which is an immutable identity within their leader's team.
+- **Hybrid Strategy**: Uses **Adjacency List** (`leader_id`) for immediate relations and **Materialized Path** (`lineage` column as `id.id.id`) for sub-tree lookups.
+- **DFS Ordering**: Hierarchical queries MUST use Recursive CTEs with a `sort_path` array to ensure "Integrantes" appear immediately below their leaders in the G12 Tree.
+- **Generation Slicing**: Members occupy immutable slots (**Geração 1 to 12**). The system supports horizontal slicing (seeing all members of a specific generation) and vertical slicing (network maps starting from a specific leader).
 
-### 2. Multi-tenancy
-- **Strict Isolation**: Every table MUST include an `organization_id` column.
-- **Query Scoping**: All Server Actions and Services must extract the `orgId` from Clerk's `auth()` and apply it to every database operation.
+### 2. Multi-tenancy & Onboarding
+- **Strict Isolation**: Every table MUST include an `organization_id`. All queries MUST be scoped using Clerk's `auth().orgId`.
+- **Invitation Workflow**: Team members are added via **Official Clerk Invitations**. The system handles localized redirects (`/[locale]/dashboard`) using absolute URLs to avoid 404 errors during onboarding.
+- **Automatic Seeding**: New organizations are automatically initialized with default ministries (e.g., "Louvor", "Filadelfia Kids") via `SeedService` upon first dashboard access.
 
-### 3. Communication Engine
-- **Fire-and-Forget**: All messaging (WhatsApp) must be triggered via `inngest.send()` to avoid blocking the main UI thread.
-- **Resilience**: WhatsApp messages are processed by Inngest with built-in retries and throttling (2s delay) to prevent number banning.
-- **Drip Marketing**: Automations (Welcome, Step Promotion) should include a `step.sleep` (human touch delay).
+### 3. Resilience & Side-effects
+- **Transaction Safety**: DB transactions (`db.transaction`) MUST contain only pure database operations.
+- **Async Side-effects**: Actions like `inngest.send()` and `logActivity` (Audit) MUST be executed **outside** the main DB transaction to prevent external API failures from rolling back user data.
+- **Error Handling**: Always use Type Guards for catch blocks (`error instanceof Error`) to safely access error messages.
+
+---
+
+## Feature Modules
+
+### 1. Member CRUD
+- **Mapeamento Explícito**: No `spread operator` in DB inserts. Every field from `MemberSchema` must be mapped manually to ensure type safety and DB compatibility.
+- **Generation Logic**: Terminology is strictly **"Geração"** (replacing "Frente") and **"Integrante"** (replacing "Discípulo").
+
+### 2. Ministries & Volunteers
+- **Sectors**: Independent management of church areas (Louvor, Mídia, etc.).
+- **Scaling**: Many-to-many relationship between members and ministries with specific `roles`.
+
+### 3. Audit Engine
+- **Audit Logs**: Every mutation (CREATE, UPDATE, DELETE, PROMOTE) is recorded in `audit_logs`, tracking the `userId`, `userName`, and the entity affected.
+- **Transparency**: Dedicated "Registros" page for administrators.
+
+### 4. Communication Engine
+- **Weekly Report**: Automated Inngest Cron job that generates a weekly activity summary and sends it via WhatsApp to the Senior Pastor (`leaderId IS NULL`).
+- **Dynamic Branding**: WhatsApp messages dynamically use the Organization Name from Clerk, falling back to "Filadelfia" if not set.
 
 ---
 
 ## Key Commands
 
-| Task                   | Command                                                           |
-| :--------------------- | :---------------------------------------------------------------- |
-| **Development**        | `npm run dev`                                                     |
-| **Production Build**   | `npm run build`                                                   |
-| **Database Sync**      | `npm run db:push` (Preferred over migrate in dev)                 |
-| **Inngest Dev Server** | `npx inngest-cli@latest dev -u http://localhost:3000/api/inngest` |
-| **Linting & A11y**     | `npm run lint:fix`                                                |
-
----
-
-## Development Conventions
-
-### Coding Style
-- **Server Actions**: Preferred for all mutations. Use Zod for strict validation.
-- **Type Safety**: Avoid `any` where possible. Use Type Narrowing (`'success' in result`) for Server Action returns.
-- **Naming**: Use `camelCase` for TypeScript/React and `snake_case` for database columns. Always map manually in `MemberService.ts`.
-
-### Visual Guidelines
-- **Density**: The dashboard is a management tool; use compact layouts (`p-3`, `text-sm`, `font-black`).
-- **Accessibility**: Every interactive element must support keyboard navigation (`onKeyDown`, `role="button"`, `tabIndex={0}`).
-- **Colors**:
-  - **Pastor**: Amber (Authority)
-  - **F1-F12**: Blue/Indigo (Growth)
-  - **Pending**: Slate/Dashed (Consolidation)
-
-### Testing
-- **Vitest**: Run unit tests for tree transformation and domain logic via `npm run test`.
-- **Logic Location**: Business rules (Age calculation, Step transitions) MUST reside in `src/utils/MemberDomain.ts`, never inside components.
+| Task                | Command                                                           |
+| :------------------ | :---------------------------------------------------------------- |
+| **Development**     | `npm run dev`                                                     |
+| **Database Sync**   | `npm run db:push` (Preferred for schema changes)                  |
+| **Inngest Dev**     | `npx inngest-cli@latest dev -u http://localhost:3000/api/inngest` |
+| **Audit Logs Sync** | `npx drizzle-kit push`                                            |
 
 ---
 
@@ -73,3 +72,9 @@ The **NextChurch** is a specialized Church Management System (CMS) built on the 
 5. `LEADERSHIP_TRAINING`
 6. `RE_ENCOUNTER`
 7. `SENDING` (End)
+
+## Coding Conventions
+- **Visual Density**: Use compact layouts (`p-3`, `text-sm`, `font-black`) for the Management BI.
+- **Naming**: `camelCase` for TS/React, `snake_case` for Database.
+- **Server Components**: Prefer RSCs for data fetching; use Client Components only for interactivity (Forms, Modals).
+- **Branding**: Friendly name is **NextChurch**, technical name is **next-church**.

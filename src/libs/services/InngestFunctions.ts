@@ -1,6 +1,6 @@
 import { db } from '@/libs/DB';
 import { members } from '@/models/Schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { inngest } from '@/libs/Inngest';
 import { WhatsAppService } from './WhatsAppService';
 import { getWeeklySummary } from './AuditService';
@@ -43,7 +43,7 @@ export const onMemberCreated = inngest.createFunction(
     if (member?.phone) {
       await step.run('send-whatsapp', async () => {
         const welcomeMessage = `Olá ${member.firstName}! Seja muito bem-vindo(a) à família *${churchName}*. Estamos felizes com sua decisão! 🙌`;
-        await WhatsAppService.sendMessage(member.phone!, welcomeMessage);
+        await WhatsAppService.sendMessage(member.phone!, welcomeMessage, organizationId);
       });
     }
 
@@ -74,7 +74,7 @@ export const onStepCompleted = inngest.createFunction(
     if (member?.phone) {
       await step.run('send-congrats', async () => {
         const message = `Parabéns ${member.firstName}! Você concluiu o passo *${newStep.replace(/_/g, ' ')}* na jornada da *${churchName}*. Continue firme! ✨`;
-        await WhatsAppService.sendMessage(member.phone!, message);
+        await WhatsAppService.sendMessage(member.phone!, message, organizationId);
       });
     }
   },
@@ -125,7 +125,7 @@ export const weeklyLeadershipReport = inngest.createFunction(
               `_Gerado por ${AppConfig.name}_`
             ].join('\n');
 
-            await WhatsAppService.sendMessage(pastor.phone!, message);
+            await WhatsAppService.sendMessage(pastor.phone!, message, org.id);
           });
         }
       }
@@ -141,7 +141,6 @@ export const dailyBirthdayCheck = inngest.createFunction(
   { cron: "15 12 * * *" }, // 12:15 UTC = 09:15 AM Brasil
   async ({ step }) => {
     const membersList = await step.run("fetch-birthday-members", async () => {
-      const sql = (await import('drizzle-orm')).sql;
       return await db.select().from(members).where(
         sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`
       );
@@ -152,7 +151,7 @@ export const dailyBirthdayCheck = inngest.createFunction(
         const churchName = await step.run(`get-church-${member.id}`, async () => await getChurchName(member.organizationId));
         await step.run(`send-birthday-msg-${member.id}`, async () => {
           const msg = `Feliz aniversário, ${member.firstName}! 🎉 Toda a família *${churchName}* celebra a sua vida hoje. Que Deus te abençoe grandemente! ✨`;
-          await WhatsAppService.sendMessage(member.phone!, msg);
+          await WhatsAppService.sendMessage(member.phone!, msg, member.organizationId);
         });
       }
     }
@@ -164,22 +163,40 @@ export const dailyBirthdayCheck = inngest.createFunction(
  */
 export const sendBroadcast = inngest.createFunction(
   { id: 'send-broadcast', name: 'Comunicação: Transmissão em Massa' },
-  { event: 'broadcast/send' },
+  { event: 'notification/broadcast.send' },
   async ({ event, step }) => {
-    const { memberIds, message } = event.data;
+    const { organizationId, filters, message } = event.data;
 
-    for (const memberId of memberIds) {
-      const member = await step.run(`fetch-${memberId}`, async () => {
-        const [res] = await db.select().from(members).where(eq(members.id, memberId)).limit(1);
-        return res;
-      });
+    // 1. Busca os membros com base nos filtros
+    const recipients = await step.run('fetch-recipients', async () => {
+      const conditions = [eq(members.organizationId, organizationId)];
+      
+      if (filters.currentStep) {
+        conditions.push(eq(members.currentStep, filters.currentStep));
+      }
+      
+      if (filters.generationSlot) {
+        conditions.push(eq(members.generationSlot, Number(filters.generationSlot)));
+      }
 
-      if (member?.phone) {
-        await step.run(`send-${memberId}`, async () => {
-          await WhatsAppService.sendMessage(member.phone!, message);
+      return await db.select().from(members).where(and(...conditions));
+    });
+
+    // 2. Envio individual com throttling
+    for (const member of recipients) {
+      if (member.phone) {
+        // Personalização básica: substitui {name} pelo primeiro nome
+        const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
+
+        await step.run(`send-${member.id}`, async () => {
+          await WhatsAppService.sendMessage(member.phone!, personalizedMessage, organizationId);
         });
-        await step.sleep(`wait-${memberId}`, '2s'); // Throttling para evitar ban
+
+        // Intervalo de segurança para não ser banido pelo WhatsApp (Throttling)
+        await step.sleep(`wait-${member.id}`, '2s');
       }
     }
-  }
+
+    return { totalSent: recipients.length };
+  },
 );
