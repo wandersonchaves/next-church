@@ -8,7 +8,7 @@ import { MemberSchema, type MemberInput } from '@/validations/MemberValidation';
 import { createMemberAction, updateMemberAction, deleteMemberAction } from '@/app/[locale]/(auth)/dashboard/members/actions';
 import { MemberDomain } from '@/utils/MemberDomain';
 import { useRouter } from 'next/navigation';
-import { User, Calendar, Phone, Award, Loader2, Search, Check, ChevronDown, X, Save, Trash2 } from 'lucide-react';
+import { User, Calendar, Phone, Award, Loader2, Search, Check, ChevronDown, Save, Trash2 } from 'lucide-react';
 import { PatternFormat } from 'react-number-format';
 
 interface MemberFormProps {
@@ -20,14 +20,17 @@ interface MemberFormProps {
     generationSlot: number | null
   }[];
   initialData?: MemberInput & { id: string };
+  onSubmitCustom?: (data: MemberInput) => Promise<{ success?: boolean; error?: string }>;
+  isPublic?: boolean;
 }
 
-export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
+export const MemberForm = ({ leaders = [], initialData, onSubmitCustom, isPublic = false }: MemberFormProps) => {
   const router = useRouter();
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [searchTerm, setSearchTerm] = React.useState('');
   const [isOpen, setIsOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isSuccess, setIsSuccess] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const isEditMode = !!initialData;
@@ -82,13 +85,23 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
   const onSubmit: SubmitHandler<MemberInput> = async (data) => {
     setServerError(null);
-    const result = isEditMode
-      ? await updateMemberAction(initialData.id, data)
-      : await createMemberAction(data);
+    
+    let result;
+    if (onSubmitCustom) {
+      result = await onSubmitCustom(data);
+    } else {
+      result = isEditMode
+        ? await updateMemberAction(initialData.id, data)
+        : await createMemberAction(data);
+    }
 
     if ('success' in result && result.success) {
-      router.push('/dashboard');
-      router.refresh();
+      if (isPublic) {
+        setIsSuccess(true);
+      } else {
+        router.push('/dashboard');
+        router.refresh();
+      }
     } else if ('error' in result) {
       setServerError(result.error ?? "Erro ao salvar.");
     }
@@ -109,15 +122,29 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
     }
   };
 
+  if (isSuccess) {
+    return (
+      <div className="max-w-4xl bg-white p-12 rounded-[3rem] border border-slate-200 shadow-2xl text-center space-y-6 animate-in zoom-in-95 duration-500">
+        <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
+          <Check size={48} strokeWidth={3} />
+        </div>
+        <h2 className="text-4xl font-black text-slate-900 tracking-tighter italic">CADASTRO REALIZADO!</h2>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Sua jornada na visão G12 começou. Em breve entraremos em contato.</p>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-10 max-w-4xl bg-white p-8 md:p-12 rounded-[3rem] border border-slate-200 shadow-2xl relative">
 
       <header className="border-b border-slate-100 pb-8 flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
-            {isEditMode ? "Editar Ficha" : "Novo Integrante"}
+            {isPublic ? "Ficha de Cadastro" : (isEditMode ? "Editar Ficha" : "Novo Integrante")}
           </h2>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 italic">Linhagem e Gestão de Gerações</p>
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 italic">
+            {isPublic ? "Seja bem-vindo à família" : "Linhagem e Gestão de Gerações"}
+          </p>
         </div>
         {(isSubmitting || isDeleting) && <Loader2 className="animate-spin text-blue-600" size={32} />}
       </header>
@@ -142,7 +169,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
       <div className="p-8 md:p-10 bg-slate-900 rounded-[3rem] shadow-2xl space-y-8 relative overflow-visible">
         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400 flex items-center gap-2">
-          <Award size={14} /> Posicionamento na Visão G12
+          <Award size={14} /> {isPublic ? "Conexão na Igreja" : "Posicionamento na Visão G12"}
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -163,13 +190,15 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
 
             {isOpen && (
               <div className="absolute z-999 w-full mt-3 bg-white rounded-4xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] max-h-80 overflow-y-auto custom-scrollbar border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-200">
-                <button
-                  type="button"
-                  onMouseDown={() => { setValue('leaderId', ''); setSearchTerm(''); setIsOpen(false); }}
-                  className={`w-full text-left px-8 py-5 text-[10px] font-black uppercase border-b border-slate-50 flex items-center justify-between ${!leaderId ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:bg-slate-50'}`}
-                >
-                  ⭐ Liderança Raiz (Pastor) {!leaderId && <Check size={16} />}
-                </button>
+                {!isPublic && (
+                  <button
+                    type="button"
+                    onMouseDown={() => { setValue('leaderId', ''); setSearchTerm(''); setIsOpen(false); }}
+                    className={`w-full text-left px-8 py-5 text-[10px] font-black uppercase border-b border-slate-50 flex items-center justify-between ${!leaderId ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:bg-slate-50'}`}
+                  >
+                    ⭐ Liderança Raiz (Pastor) {!leaderId && <Check size={16} />}
+                  </button>
+                )}
 
                 {filteredLeaders.map(l => (
                   <button
@@ -193,18 +222,20 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
             )}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Nível de Geração (1 a 12)</label>
-            <div className="relative">
-              <ChevronDown size={18} className="absolute right-6 top-5 text-blue-400 pointer-events-none" />
-              <select {...register('generationSlot')} className="w-full px-8 py-5 rounded-4xl border-none shadow-inner outline-none focus:ring-4 focus:ring-blue-500/20 font-black text-slate-800 cursor-pointer appearance-none bg-white h-16">
-                <option value="">⏳ AGUARDANDO POSIÇÃO</option>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <option key={i + 1} value={`${i + 1}`}>GERAÇÃO {i + 1}</option>
-                ))}
-              </select>
+          {!isPublic && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Nível de Geração (1 a 12)</label>
+              <div className="relative">
+                <ChevronDown size={18} className="absolute right-6 top-5 text-blue-400 pointer-events-none" />
+                <select {...register('generationSlot')} className="w-full px-8 py-5 rounded-4xl border-none shadow-inner outline-none focus:ring-4 focus:ring-blue-500/20 font-black text-slate-800 cursor-pointer appearance-none bg-white h-16">
+                  <option value="">⏳ AGUARDANDO POSIÇÃO</option>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={`${i + 1}`}>GERAÇÃO {i + 1}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -241,7 +272,7 @@ export const MemberForm = ({ leaders = [], initialData }: MemberFormProps) => {
           disabled={isSubmitting || isDeleting}
           className={`flex-1 py-7 rounded-[2.5rem] text-white font-black uppercase tracking-[0.3em] shadow-2xl transition-all flex items-center justify-center gap-4 text-sm ${isSubmitting ? 'bg-slate-400' : 'bg-linear-to-r from-blue-600 to-indigo-700 hover:scale-[1.02] active:scale-[0.98]'}`}
         >
-          {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? <><Save size={20} /> Salvar Alterações</> : "Cadastrar na Visão")}
+          {isSubmitting ? <Loader2 className="animate-spin" /> : (isEditMode ? <><Save size={20} /> Salvar Alterações</> : (isPublic ? "Enviar Cadastro" : "Cadastrar na Visão"))}
         </button>
 
         {isEditMode && (

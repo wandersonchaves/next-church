@@ -14,8 +14,11 @@ const isProtectedRoute = createRouteMatcher([
   '/:locale/dashboard(.*)',
 ]);
 
-// Rota do Inngest: DEVE SER TOTALMENTE PÚBLICA PARA O CLOUD SYNC
-const isInngestRoute = createRouteMatcher(['/api/inngest']);
+// Rotas públicas (ex: Cadastro de Membros via Link Externo)
+const isPublicRoute = createRouteMatcher([
+  '/dashboard/join/(.*)',
+  '/:locale/dashboard/join/(.*)',
+]);
 
 const aj = arcjet.withRule(
   detectBot({
@@ -32,8 +35,8 @@ export default async function proxy(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
-  // 1. BYPASS TOTAL PARA INNGEST (CRÍTICO PARA PRODUÇÃO)
-  if (isInngestRoute(request)) {
+  // 1. BYPASS TOTAL PARA INNGEST (API NÃO USA I18N NEM CLERK)
+  if (request.nextUrl.pathname.startsWith('/api/inngest')) {
     return NextResponse.next();
   }
 
@@ -46,8 +49,11 @@ export default async function proxy(
   }
 
   // 3. Clerk & I18n
+  // NOTA: clerkMiddleware deve rodar em todas as rotas que renderizam o ClerkProvider (layouts)
   return clerkMiddleware(async (auth, req) => {
-    if (isProtectedRoute(req)) {
+    const isJoinRoute = isPublicRoute(req);
+
+    if (isProtectedRoute(req) && !isJoinRoute) {
       const locale = req.nextUrl.pathname.match(/(\/.*)\/dashboard/)?.at(1) ?? '';
       const signInUrl = new URL(`${locale}/sign-in`, req.url);
 
