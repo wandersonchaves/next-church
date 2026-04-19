@@ -43,24 +43,58 @@ export async function POST(req: Request) {
       console.log("📥 MENSAGEM RECEBIDA DO MEMBRO:", JSON.stringify(body, null, 2));
     }
 
-    // Sanitização para evitar erro de limite do Inngest (256KB)
-    // Removemos campos de mídia pesados que não são usados no processamento inicial
-    const sanitizedBody = JSON.parse(JSON.stringify(body));
-    const recursiveSanitize = (obj: any) => {
-      if (!obj || typeof obj !== 'object') return;
-      delete obj.jpegThumbnail;
-      delete obj.thumbnail;
-      for (const key in obj) {
-        if (typeof obj[key] === 'object') recursiveSanitize(obj[key]);
+    // Whitelist de campos essenciais para o processamento do Inbox
+    // Isso reduz drasticamente o tamanho do payload (de MBs para KBs)
+    const essentialData = {
+      event: body.event,
+      instanceId: body.instanceId,
+      instanceName: body.instanceName,
+      data: {
+        event: body.data?.event,
+        instanceId: body.data?.instanceId,
+        instanceName: body.data?.instanceName,
+        // Informações básicas da mensagem (Evolution v2)
+        Info: body.data?.Info ? {
+          ID: body.data.Info.ID,
+          Sender: body.data.Info.Sender,
+          IsFromMe: body.data.Info.IsFromMe,
+          Timestamp: body.data.Info.Timestamp,
+          Type: body.data.Info.Type,
+          PushName: body.data.Info.PushName,
+        } : undefined,
+        // Estrutura de mensagem (Evolution v1/Baileys)
+        key: body.data?.key ? {
+          remoteJid: body.data.key.remoteJid,
+          fromMe: body.data.key.fromMe,
+          id: body.data.key.id,
+        } : undefined,
+        // Conteúdo da mensagem (Texto e Legendas)
+        Message: body.data?.Message ? {
+          conversation: body.data.Message.conversation,
+          extendedTextMessage: body.data.Message.extendedTextMessage ? {
+            text: body.data.Message.extendedTextMessage.text
+          } : undefined,
+          imageMessage: body.data.Message.imageMessage ? {
+            caption: body.data.Message.imageMessage.caption
+          } : undefined,
+          videoMessage: body.data.Message.videoMessage ? {
+            caption: body.data.Message.videoMessage.caption
+          } : undefined,
+          protocolMessage: body.data.Message.protocolMessage ? {
+            type: body.data.Message.protocolMessage.type
+          } : undefined,
+        } : undefined,
+        // Fallbacks de texto plano
+        text: body.data?.text,
+        content: body.data?.content,
       }
     };
-    recursiveSanitize(sanitizedBody);
 
     // Asynchronous hand-off to Inngest
     await inngest.send({
       name: 'whatsapp/webhook.received',
       data: {
-        ...sanitizedBody,
+        ...essentialData,
         normalizedEvent: incomingEvent 
       },
     });
