@@ -231,15 +231,19 @@ export const onWhatsAppWebhook = inngest.createFunction(
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
       const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? data.data : data;
       
-      const isFromMe = messageData.key?.fromMe;
-      const sender = messageData.key?.remoteJid || messageData.sender;
+      const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
+      const sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
+      
+      // Evolution Go (v2) uses capitalized "Message", while Baileys/v1 uses "message"
+      const msg = messageData.message || messageData.Message;
       
       // Extração robusta de conteúdo (Conversation, Extended Text, etc)
-      const content = messageData.message?.conversation || 
-                      messageData.message?.extendedTextMessage?.text ||
-                      messageData.message?.imageMessage?.caption ||
-                      messageData.message?.videoMessage?.caption ||
+      const content = msg?.conversation || 
+                      msg?.extendedTextMessage?.text ||
+                      msg?.imageMessage?.caption ||
+                      msg?.videoMessage?.caption ||
                       messageData.content || 
+                      messageData.text ||
                       "[Mídia/Formato não suportado]";
 
       if (isFromMe) return { status: 'ignored_from_me' };
