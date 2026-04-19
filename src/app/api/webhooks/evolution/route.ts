@@ -43,12 +43,25 @@ export async function POST(req: Request) {
       console.log("📥 MENSAGEM RECEBIDA DO MEMBRO:", JSON.stringify(body, null, 2));
     }
 
+    // Sanitização para evitar erro de limite do Inngest (256KB)
+    // Removemos campos de mídia pesados que não são usados no processamento inicial
+    const sanitizedBody = JSON.parse(JSON.stringify(body));
+    const recursiveSanitize = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return;
+      delete obj.jpegThumbnail;
+      delete obj.thumbnail;
+      for (const key in obj) {
+        if (typeof obj[key] === 'object') recursiveSanitize(obj[key]);
+      }
+    };
+    recursiveSanitize(sanitizedBody);
+
     // Asynchronous hand-off to Inngest
     await inngest.send({
       name: 'whatsapp/webhook.received',
       data: {
-        ...body,
-        normalizedEvent: incomingEvent // Passamos o evento normalizado
+        ...sanitizedBody,
+        normalizedEvent: incomingEvent 
       },
     });
     // Respond immediately with 200 OK as per best practices
