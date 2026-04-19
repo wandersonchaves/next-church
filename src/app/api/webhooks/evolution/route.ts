@@ -21,6 +21,8 @@ export async function POST(req: Request) {
       'messages.upsert', 
       'Connected', 
       'connection.update',
+      'ChatPresence',
+      'Presence',
       'Logout', 
       'Disconnected'
     ];

@@ -53,7 +53,7 @@ export async function syncWebhookAction() {
     const client = EvolutionGoClient.getInstance();
     
     // Constrói a URL do Webhook
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.vercel.app';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.up.railway.app';
     const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
 
     const result = await client.setWebhook(webhookUrl);

@@ -228,7 +228,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
     const instanceId = instance || data.instanceId;
 
     // Processamento de Mensagens
-    if (eventName === 'Message' || eventName === 'messages.upsert') {
+    if (['Message', 'messages.upsert'].includes(eventName)) {
       const messageData = eventName === 'messages.upsert' ? data.data : data;
       
       const isFromMe = messageData.key?.fromMe;
@@ -249,6 +249,12 @@ export const onWhatsAppWebhook = inngest.createFunction(
           });
         });
       }
+    }
+
+    // Processamento de Presença (Opcional, mas útil para logs)
+    if (['Presence', 'ChatPresence'].includes(eventName)) {
+       // Log de presença se desejar futuro monitoramento
+       return { status: 'presence_logged' };
     }
 
     // Processamento de Conexão
