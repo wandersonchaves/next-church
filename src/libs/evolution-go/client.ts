@@ -148,35 +148,36 @@ export class EvolutionGoClient {
 
   /**
    * Configures the webhook for the current instance.
-   * Optimized for Evolution GO (Golang) and the specific Dashboard events.
+   * Optimized for Evolution GO (Golang) v2.
    */
   public async setWebhook(webhookUrl: string) {
     if (!this.apiKey || !this.instanceName) {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
+    // Na Evolution GO v2, o endpoint principal é /webhook/set
+    // Tentamos também variações comuns se a primeira falhar
     const endpoints = [
-      `${this.baseUrl}/webhook/instance`,
+      `${this.baseUrl}/webhook/set`,
       `${this.baseUrl}/webhook/set/${this.instanceName}`,
       `${this.baseUrl}/instance/webhook/set/${this.instanceName}`
     ];
 
     const body = {
-      instance: this.instanceName,
-      enabled: true,
       url: webhookUrl,
+      enabled: true,
+      // Alguns campos opcionais que a v2 pode exigir ou ignorar
       webhook_by_events: false,
-      webhook_base64: false,
       events: [
         'MESSAGE',
+        'MESSAGES_UPSERT', // Algumas versões usam este nome
         'CONNECTION',
-        'QRCODE',
-        'CONTACT',
-        'GROUP',
-        'PRESENCE',
-        'CALL'
+        'TYPE_MESSAGE',
+        'RECEIPT'
       ]
     };
+
+    let lastError = '';
 
     for (const url of endpoints) {
       try {
@@ -196,11 +197,13 @@ export class EvolutionGoClient {
         if (response.ok) {
           return { success: true, data: rawText };
         }
+        lastError = rawText;
       } catch (error) {
         console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
+        lastError = String(error);
       }
     }
 
-    return { success: false, error: 'Não foi possível sincronizar. Verifique a URL e a API Key.' };
+    return { success: false, error: `Falha na sincronização: ${lastError}` };
   }
 }
