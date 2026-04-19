@@ -59,6 +59,14 @@ export async function syncWebhookAction() {
     const result = await client.setWebhook(webhookUrl);
 
     if (result.success) {
+      // Registrar vínculo da instância com a organização atual para o Webhook saber para onde mandar as mensagens
+      const { NotificationService } = await import('@/libs/services/NotificationService');
+      const status = await client.getInstanceStatus();
+      const identifier = status.name || process.env.EVOLUTION_INSTANCE || 'default';
+      
+      await NotificationService.logConnectionState(identifier, 'CONNECTED_AND_SYNCED', orgId);
+      console.info(`[SYNC_WEBHOOK] Instance ${identifier} claimed by Org ${orgId}`);
+      
       return { success: true };
     } else {
       return { error: typeof result.error === 'string' ? result.error : 'Falha ao sincronizar webhook' };

@@ -28,7 +28,7 @@ export const NotificationService = {
   /**
    * Persists an incoming message from Evolution GO.
    */
-  async saveIncomingMessage(data: { sender: string; content: string; instanceId: string }) {
+  async saveIncomingMessage(data: { sender: string; content: string; instanceId: string; instanceName?: string }) {
     // Extrai o identificador antes do @ ou usa o sender inteiro se não houver @
     const senderId = data.sender.includes('@') ? data.sender.split('@')[0] : data.sender;
     const member = await this.findMemberByPhone(senderId || '');
@@ -42,7 +42,10 @@ export const NotificationService = {
       // Se não achou o membro pelo telefone, tentamos ver se há alguma pista da organização
       // No futuro, isso deve vir de uma tabela 'whatsapp_instances'
       const lastAudit = await db.query.auditLogs.findFirst({
-        where: (audit, { eq }) => eq(audit.userName, `Instance: ${data.instanceId}`),
+        where: (audit, { or, ilike }) => or(
+          ilike(audit.userName, `%${data.instanceId}%`),
+          ilike(audit.userName, `%${data.instanceName}%`)
+        ),
         orderBy: (audit, { desc }) => [desc(audit.createdAt)],
       });
       
@@ -96,11 +99,14 @@ export const NotificationService = {
   /**
    * Logs connection state changes in the audit log.
    */
-  async logConnectionState(instanceId: string, state: string) {
-    // Attempt to find any organization to log this system event
-    // In a multi-tenant setup, we might have a dedicated system organization or log to the first one found
-    const firstMember = await db.query.members.findFirst();
-    const orgId = firstMember?.organizationId || 'system';
+  async logConnectionState(instanceId: string, state: string, organizationId?: string) {
+    // Se não passar orgId, tenta o fallback (mas agora o syncWebhookAction passa)
+    let orgId = organizationId;
+    
+    if (!orgId) {
+      const firstMember = await db.query.members.findFirst();
+      orgId = firstMember?.organizationId || 'system';
+    }
 
     try {
       await db.insert(auditLogs).values({

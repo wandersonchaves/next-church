@@ -270,6 +270,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
             sender,
             content: String(content),
             instanceId,
+            instanceName: data?.instanceName || data?.data?.instanceName,
           });
         });
       }

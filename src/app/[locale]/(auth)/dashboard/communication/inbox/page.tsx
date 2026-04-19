@@ -11,6 +11,7 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
 
   if (!orgId) return null;
 
+  console.log(`[INBOX_PAGE] Fetching messages for Org: ${orgId}`);
   const messages = await NotificationService.getIncomingMessages(orgId);
 
   return (
