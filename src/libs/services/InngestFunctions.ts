@@ -225,11 +225,15 @@ export const onWhatsAppWebhook = inngest.createFunction(
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
     const { normalizedEvent, data, instance } = event.data;
-    const instanceId = instance || data.instanceId;
+    const instanceId = instance || data?.instanceId || data?.data?.instanceId;
+
+    console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId}`);
 
     // Processamento de Mensagens
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
       const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? data.data : data;
+      
+      console.log(`[INNGEST] Message Data extracted, keys present: ${Object.keys(messageData || {}).join(', ')}`);
       
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
       const sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
