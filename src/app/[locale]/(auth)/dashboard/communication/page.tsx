@@ -3,7 +3,7 @@
 import { Filter, Info, Loader2, Send, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction } from './actions';
+import { sendBroadcastAction, syncWebhookAction } from './actions';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 
@@ -13,8 +13,20 @@ export default function CommunicationPage() {
   const [step, setStep] = React.useState('');
   const [generation, setGeneration] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  async function handleSync() {
+    setSyncing(true);
+    const res = await syncWebhookAction();
+    if (res.success) {
+      alert('Conexão sincronizada com sucesso! As mensagens agora devem chegar.');
+    } else {
+      setError(res.error || 'Erro ao sincronizar conexão.');
+    }
+    setSyncing(false);
+  }
 
   async function handleSend() {
     if (!message) {
@@ -57,13 +69,25 @@ export default function CommunicationPage() {
             </div>
           </div>
 
-          <Link 
-            href={`/${locale}/dashboard/communication/inbox`}
-            className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <MessageSquare size={16} />
-            Inbox
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link 
+              href={`/${locale}/dashboard/communication/inbox`}
+              className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <MessageSquare size={16} />
+              Inbox
+            </Link>
+
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-[10px] font-black tracking-widest text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:opacity-50"
+              title="Sincronizar configuração de Webhook na Evolution"
+            >
+              <Loader2 className={syncing ? 'animate-spin' : ''} size={16} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Conexão'}
+            </button>
+          </div>
         </header>
 
         {/* CONTÊINER PRINCIPAL COM FLEX WRAP (Fase 4) */}

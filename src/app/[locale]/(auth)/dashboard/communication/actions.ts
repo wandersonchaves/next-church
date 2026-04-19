@@ -3,6 +3,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { inngest } from '@/libs/Inngest';
+import { EvolutionGoClient } from '@/libs/evolution-go/client';
 
 const BroadcastSchema = z.object({
   message: z.string().min(5, 'A mensagem deve ter pelo menos 5 caracteres'),
@@ -38,5 +39,32 @@ export async function sendBroadcastAction(data: z.infer<typeof BroadcastSchema>)
   } catch (e) {
     console.error(e);
     return { error: 'Falha ao colocar mensagens na fila.' };
+  }
+}
+
+/**
+ * Sincroniza a configuração do Webhook na Evolution API
+ */
+export async function syncWebhookAction() {
+  const { orgId } = await auth();
+  if (!orgId) return { error: 'Não autorizado' };
+
+  try {
+    const client = EvolutionGoClient.getInstance();
+    
+    // Constrói a URL do Webhook
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.vercel.app';
+    const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
+
+    const result = await client.setWebhook(webhookUrl);
+
+    if (result.success) {
+      return { success: true };
+    } else {
+      return { error: typeof result.error === 'string' ? result.error : 'Falha ao sincronizar webhook' };
+    }
+  } catch (error) {
+    console.error('[SYNC_WEBHOOK_ERROR]', error);
+    return { error: 'Erro interno ao sincronizar' };
   }
 }

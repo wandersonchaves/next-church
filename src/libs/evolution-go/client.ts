@@ -142,4 +142,49 @@ export class EvolutionGoClient {
       return [];
     }
   }
+
+  /**
+   * Configures the webhook for the current instance.
+   * Based on Evolution API v2 documentation.
+   */
+  public async setWebhook(webhookUrl: string) {
+    if (!this.apiKey || !this.instanceName) {
+      return { success: false, error: 'Instance or API Key not configured' };
+    }
+
+    const url = `${this.baseUrl}/webhook/set/${this.instanceName}`;
+
+    const body = {
+      enabled: true,
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: false,
+      events: [
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'MESSAGES_DELETE',
+        'SEND_MESSAGE',
+        'CONNECTION_UPDATE',
+        'CONTACTS_UPSERT',
+        'CHATS_UPSERT'
+      ]
+    };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.apiKey
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+      return { success: response.ok, data };
+    } catch (error) {
+      console.error('[EVOLUTION_GO_WEBHOOK_SET_ERROR]', error);
+      return { success: false, error: String(error) };
+    }
+  }
 }
