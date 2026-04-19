@@ -152,8 +152,12 @@ export class EvolutionGoClient {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // Trying /webhook/set which is the most common v2 endpoint
-    const url = `${this.baseUrl}/webhook/set`;
+    // Estratégia para Evolution GO: O nome da instância geralmente vai na URL nestas versões
+    const endpoints = [
+      `${this.baseUrl}/webhook/set/${this.instanceName}`,
+      `${this.baseUrl}/webhook/instance/${this.instanceName}`,
+      `${this.baseUrl}/instance/webhook/set/${this.instanceName}`
+    ];
 
     const body = {
       enabled: true,
@@ -171,40 +175,29 @@ export class EvolutionGoClient {
       ]
     };
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': this.apiKey,
-          'instance': this.instanceName
-        },
-        body: JSON.stringify(body),
-      });
-
-      const rawText = await response.text();
-      console.info(`[EVOLUTION_GO_SYNC] Status: ${response.status} | Body: ${rawText}`);
-
-      if (response.status === 404) {
-        // Se /webhook/set der 404, vamos tentar o /instance/setWebhook como fallback para Evolution GO
-        const fallbackUrl = `${this.baseUrl}/instance/setWebhook`;
-        const fallbackRes = await fetch(fallbackUrl, {
+    for (const url of endpoints) {
+      try {
+        console.info(`[EVOLUTION_GO_SYNC] Trying endpoint: ${url}`);
+        const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'apikey': this.apiKey,
-            'instance': this.instanceName
           },
           body: JSON.stringify(body),
         });
-        const fallbackText = await fallbackRes.text();
-        return { success: fallbackRes.ok, data: fallbackText };
+
+        const rawText = await response.text();
+        console.info(`[EVOLUTION_GO_SYNC] URL: ${url} | Status: ${response.status} | Body: ${rawText}`);
+
+        if (response.ok) {
+          return { success: true, data: rawText };
+        }
+      } catch (error) {
+        console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
       }
-      
-      return { success: response.ok, data: rawText };
-    } catch (error) {
-      console.error('[EVOLUTION_GO_WEBHOOK_SET_ERROR]', error);
-      return { success: false, error: String(error) };
     }
+
+    return { success: false, error: 'Todos os endpoints de webhook retornaram erro ou 404. Verifique a versão da API.' };
   }
 }
