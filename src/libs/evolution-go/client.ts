@@ -155,47 +155,54 @@ export class EvolutionGoClient {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // De acordo com a documentação enviada, o endpoint correto é /webhook/instance
-    const url = `${this.baseUrl}/webhook/instance`;
+    // Tentamos os endpoints mais prováveis para Evolution GO v2
+    const endpoints = [
+      `${this.baseUrl}/webhook/set`,
+      `${this.baseUrl}/instance/webhook`,
+      `${this.baseUrl}/webhook/instance`
+    ];
 
     const body = {
+      instance: this.instanceName, // Algumas versões exigem no corpo
       url: webhookUrl,
       enabled: true,
       webhook_by_events: false,
-      webhook_base64: false,
       events: [
         'QRCODE_UPDATED',
         'MESSAGES_UPSERT',
         'MESSAGES_UPDATE',
-        'MESSAGES_DELETE',
         'SEND_MESSAGE',
-        'CONNECTION_UPDATE',
-        'TYPEBOT_START'
+        'CONNECTION_UPDATE'
       ]
     };
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': this.apiKey,
-          'instance': this.instanceName
-        },
-        body: JSON.stringify(body),
-      });
+    let lastError = '';
 
-      const rawText = await response.text();
-      console.info(`[EVOLUTION_GO_SYNC] URL: ${url} | Status: ${response.status} | Body: ${rawText}`);
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.apiKey,
+            'instance': this.instanceName
+          },
+          body: JSON.stringify(body),
+        });
 
-      if (response.ok) {
-        return { success: true, data: rawText };
+        const rawText = await response.text();
+        console.info(`[EVOLUTION_GO_SYNC] Attempting URL: ${url} | Status: ${response.status} | Response: ${rawText}`);
+
+        if (response.ok) {
+          return { success: true, data: rawText };
+        }
+        lastError = `URL ${url} retornou ${response.status}: ${rawText}`;
+      } catch (error) {
+        console.error(`[EVOLUTION_GO_SYNC_ERROR] Connection failed for ${url}:`, error);
+        lastError = String(error);
       }
-      
-      return { success: false, error: `Erro ${response.status}: ${rawText}` };
-    } catch (error) {
-      console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
-      return { success: false, error: String(error) };
     }
+
+    return { success: false, error: `Falha na sincronização: ${lastError}` };
   }
 }
