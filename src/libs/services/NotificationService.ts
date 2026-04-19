@@ -27,19 +27,23 @@ export const NotificationService = {
   async saveIncomingMessage(data: { sender: string; content: string; instanceId: string }) {
     const phone = data.sender.split('@')[0];
     const member = await this.findMemberByPhone(phone);
-
-    if (!member) {
-      console.warn(`[NOTIFICATION_SERVICE] Member not found for phone: ${phone}`);
-      return;
+    
+    // Fallback: Se não achar o membro, tenta achar qualquer membro para pegar a organizationId
+    // Em produção, isso deve ser mapeado via tabela de instâncias
+    let orgId = member?.organizationId;
+    if (!orgId) {
+      const firstMember = await db.query.members.findFirst();
+      orgId = firstMember?.organizationId || 'system';
+      console.warn(`[NOTIFICATION_SERVICE] Unknown sender ${phone}. Saving to org: ${orgId}`);
     }
 
     try {
       await db.insert(notificationLogs).values({
-        organizationId: member.organizationId,
-        memberId: member.id,
+        organizationId: orgId,
+        memberId: member?.id || null,
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
-        content: data.content,
+        content: `${!member ? `[De: ${phone}] ` : ''}${data.content}`,
         sentAt: new Date(),
       });
     } catch (error) {

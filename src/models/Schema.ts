@@ -86,7 +86,7 @@ export const memberJourneys = pgTable('member_journeys', {
 export const notificationLogs = pgTable('notification_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: varchar('organization_id', { length: 255 }).notNull(),
-  memberId: uuid('member_id').references(() => members.id).notNull(),
+  memberId: uuid('member_id').references(() => members.id), // Removido .notNull()
   type: varchar('type', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull(),
   content: text('content').notNull(),

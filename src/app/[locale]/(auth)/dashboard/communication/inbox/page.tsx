@@ -50,11 +50,11 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
                 </div>
                 <div className="flex flex-col overflow-hidden">
                   <span className="truncate text-sm font-black text-slate-800">
-                    {msg.member?.firstName} {msg.member?.lastName}
+                    {msg.member ? `${msg.member.firstName} ${msg.member.lastName}` : 'Contato Desconhecido'}
                   </span>
                   <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
                     <Phone size={10} />
-                    {msg.member?.phone || 'Sem número'}
+                    {msg.member?.phone || 'WhatsApp'}
                   </div>
                 </div>
               </div>
