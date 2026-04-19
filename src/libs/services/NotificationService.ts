@@ -9,13 +9,17 @@ export const NotificationService = {
    * Handles Brazil's 9th digit complexity by matching the suffix.
    */
   async findMemberByPhone(phone: string) {
+    // Remove tudo que não for dígito. 
+    // Se for um LID (ex: 384399...lid), o "lid" será removido e sobrará o número.
     const cleanPhone = phone.replace(/\D/g, '');
-    const suffix = cleanPhone.slice(-8); // Last 8 digits are most stable
+    
+    if (cleanPhone.length < 8) return null;
+
+    const suffix = cleanPhone.slice(-8);
 
     return await db.query.members.findFirst({
       where: (members, { or, ilike }) => or(
         ilike(members.phone, `%${suffix}`),
-        // If the number in DB has the 9th digit and suffix is only 8
         ilike(members.phone, `%${cleanPhone.slice(-9)}`)
       ),
     });
@@ -25,17 +29,30 @@ export const NotificationService = {
    * Persists an incoming message from Evolution GO.
    */
   async saveIncomingMessage(data: { sender: string; content: string; instanceId: string }) {
-    const phone = data.sender.split('@')[0];
-    const member = await this.findMemberByPhone(phone);
+    // Extrai o identificador antes do @ ou usa o sender inteiro se não houver @
+    const senderId = data.sender.includes('@') ? data.sender.split('@')[0] : data.sender;
+    const member = await this.findMemberByPhone(senderId || '');
     
-    console.log(`[NOTIFICATION_SERVICE] Processing message from ${phone}. Member found: ${member ? `${member.firstName} (ID: ${member.id})` : 'NO'}`);
+    console.log(`[NOTIFICATION_SERVICE] Processing message from ${senderId}. Member found: ${member ? `${member.firstName} (Org: ${member.organizationId})` : 'NO'}`);
 
-    // Fallback logic
+    // Fallback logic aprimorado
     let orgId = member?.organizationId;
+    
+    if (!orgId) {
+      // Se não achou o membro pelo telefone, tentamos ver se há alguma pista da organização
+      // No futuro, isso deve vir de uma tabela 'whatsapp_instances'
+      const lastAudit = await db.query.auditLogs.findFirst({
+        where: (audit, { eq }) => eq(audit.userName, `Instance: ${data.instanceId}`),
+        orderBy: (audit, { desc }) => [desc(audit.createdAt)],
+      });
+      
+      orgId = lastAudit?.organizationId;
+    }
+
     if (!orgId) {
       const firstMember = await db.query.members.findFirst();
       orgId = firstMember?.organizationId || 'system';
-      console.warn(`[NOTIFICATION_SERVICE] Unknown sender ${phone}. Falling back to org: ${orgId}`);
+      console.warn(`[NOTIFICATION_SERVICE] Fallback org used: ${orgId}`);
     }
 
     try {
@@ -44,7 +61,7 @@ export const NotificationService = {
         memberId: member?.id || null,
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
-        content: `${!member ? `[De: ${phone}] ` : ''}${data.content}`,
+        content: `${!member ? `[De: ${senderId}] ` : ''}${data.content}`,
         sentAt: new Date(),
       }).returning();
       

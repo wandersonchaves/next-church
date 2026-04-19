@@ -242,15 +242,26 @@ export const onWhatsAppWebhook = inngest.createFunction(
       const msg = messageData.message || messageData.Message;
       
       // Extração robusta de conteúdo (Conversation, Extended Text, etc)
-      const content = msg?.conversation || 
+      let content = msg?.conversation || 
                       msg?.extendedTextMessage?.text ||
                       msg?.imageMessage?.caption ||
                       msg?.videoMessage?.caption ||
                       messageData.content || 
-                      messageData.text ||
-                      "[Mídia/Formato não suportado]";
+                      messageData.text;
 
-      if (isFromMe) return { status: 'ignored_from_me' };
+      // Suporte para mensagens de protocolo ou informativas
+      if (!content && msg?.protocolMessage) {
+        content = "[Mensagem de Sistema/Protocolo]";
+      }
+
+      if (!content) content = "[Mídia ou Formato não suportado]";
+
+      // Se for mensagem enviada por mim (IsFromMe), opcionalmente podemos querer logar 
+      // mas por padrão ignoramos para não poluir o Inbox de mensagens recebidas.
+      if (isFromMe) {
+        console.log(`[INNGEST] Ignoring message from self: ${sender}`);
+        return { status: 'ignored_from_me' };
+      }
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
