@@ -16,37 +16,62 @@ export async function POST(req: Request) {
     }
 
     // Performance: Fast response for ignored events
-    const supportedEvents = ['Message', 'Connected', 'QRCode', 'Logout', 'Disconnected'];
+    const supportedEvents = [
+      'Message', 
+      'messages.upsert', 
+      'Connected', 
+      'connection.update',
+      'QRCode', 
+      'Logout', 
+      'Disconnected'
+    ];
+
     if (!supportedEvents.includes(event)) {
       return NextResponse.json({ status: 'ignored' });
     }
 
-    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${event} | Instance: ${data.instanceId}`);
+    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${event}`);
 
     // Strategy Pattern for Event Handling
     switch (event) {
       case 'Message':
-        // Extract sender (JID), content, and instanceId
-        const sender = data.sender || data.Info?.remoteJid;
-        const content = data.content || data.Message?.conversation || data.Message?.extendedTextMessage?.text;
-        
+      case 'messages.upsert': {
+        const messageData = event === 'messages.upsert' ? data.data : data;
+
+        // v2 structure extraction
+        const isFromMe = messageData.key?.fromMe;
+        const sender = messageData.key?.remoteJid || messageData.sender;
+        const content = messageData.message?.conversation || 
+                        messageData.message?.extendedTextMessage?.text ||
+                        messageData.content;
+
+        // Ignore messages sent by the bot itself to avoid loops or redundant logs
+        if (isFromMe) {
+          return NextResponse.json({ status: 'ignored_from_me' });
+        }
+
         if (sender && content) {
           await NotificationService.saveIncomingMessage({
             sender,
             content,
-            instanceId: data.instanceId,
+            instanceId: data.instanceId || body.instance,
           });
         }
         break;
+      }
 
       case 'Connected':
-        await NotificationService.logConnectionState(data.instanceId, 'CONNECTED');
+      case 'connection.update':
+        if (data.state === 'open' || event === 'Connected') {
+          await NotificationService.logConnectionState(data.instanceId || body.instance, 'CONNECTED');
+        }
         break;
 
       case 'Logout':
       case 'Disconnected':
-        await NotificationService.logConnectionState(data.instanceId, 'LOGGED_OUT');
+        await NotificationService.logConnectionState(data.instanceId || body.instance, 'LOGGED_OUT');
         break;
+
 
       case 'QRCode':
         // Specific logic for QR Code monitoring can be added here
