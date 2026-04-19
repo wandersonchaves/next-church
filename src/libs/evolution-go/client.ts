@@ -152,6 +152,7 @@ export class EvolutionGoClient {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
+    // Evolution v2 uses POST /webhook/set/{instance}
     const url = `${this.baseUrl}/webhook/set/${this.instanceName}`;
 
     const body = {
@@ -175,12 +176,24 @@ export class EvolutionGoClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': this.apiKey
+          'apikey': this.apiKey,
+          'instance': this.instanceName
         },
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      
+      // Evolution API sometimes returns "true" or "{"status":200}"
+      // We check if it's a valid JSON or just a success string
+      let data;
+      try {
+        data = rawText ? JSON.parse(rawText) : { success: response.ok };
+      } catch {
+        // If it's not JSON (like the string "true"), we treat it as success if response was OK
+        data = { raw: rawText };
+      }
+
       return { success: response.ok, data };
     } catch (error) {
       console.error('[EVOLUTION_GO_WEBHOOK_SET_ERROR]', error);
