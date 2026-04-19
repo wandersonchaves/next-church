@@ -113,6 +113,40 @@ export class EvolutionGoClient {
   }
 
   /**
+   * Fetches the connection status of the current instance.
+   */
+  public async getInstanceStatus() {
+    if (!this.apiKey || !this.instanceName) {
+      return { connected: false, error: 'Config missing' };
+    }
+
+    const url = `${this.baseUrl}/instance/status`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'apikey': this.apiKey,
+          'instance': this.instanceName
+        },
+        next: { revalidate: 30 } // Cache de 30 segundos
+      });
+
+      if (!response.ok) return { connected: false };
+      
+      const result = await response.json();
+      return {
+        connected: result.data?.Connected === true,
+        loggedIn: result.data?.LoggedIn === true,
+        name: result.data?.Name,
+      };
+    } catch (error) {
+      console.error('[EVOLUTION_GO_STATUS_ERROR]', error);
+      return { connected: false, error: String(error) };
+    }
+  }
+
+  /**
    * Configures the webhook for the current instance.
    * Optimized for Evolution GO (Golang) and the specific Dashboard events.
    */

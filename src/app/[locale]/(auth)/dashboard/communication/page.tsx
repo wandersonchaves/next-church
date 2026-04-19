@@ -1,9 +1,9 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction, syncWebhookAction } from './actions';
+import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction } from './actions';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 
@@ -14,8 +14,26 @@ export default function CommunicationPage() {
   const [generation, setGeneration] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
+  const [status, setStatus] = React.useState<{ connected: boolean; name?: string } | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Busca o status ao carregar
+  React.useEffect(() => {
+    async function fetchStatus() {
+      const res = await getWhatsAppStatusAction();
+      if (res.success && res.status) {
+        setStatus({
+          connected: res.status.connected,
+          name: res.status.name as string | undefined
+        });
+      }
+    }
+    fetchStatus();
+    // Refresh a cada 1 minuto
+    const interval = setInterval(fetchStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleSync() {
     setSyncing(true);
@@ -65,7 +83,18 @@ export default function CommunicationPage() {
             </div>
             <div>
               <h1 className="text-xl leading-none font-black tracking-tight text-slate-900 uppercase">Hub de Comunicação</h1>
-              <p className="mt-1.5 text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">Mensageria Estratégica</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <p className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">Mensageria Estratégica</p>
+                {status && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-slate-200" />
+                    <div className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${status.connected ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {status.connected ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
+                      {status.connected ? `Online: ${status.name || 'WhatsApp'}` : 'Desconectado'}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 

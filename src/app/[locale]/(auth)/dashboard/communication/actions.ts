@@ -64,7 +64,20 @@ export async function syncWebhookAction() {
       return { error: typeof result.error === 'string' ? result.error : 'Falha ao sincronizar webhook' };
     }
   } catch (error) {
-    console.error('[SYNC_WEBHOOK_ERROR]', error);
-    return { error: 'Erro interno ao sincronizar' };
+  console.error('[SYNC_WEBHOOK_ERROR]', error);
+  return { error: 'Erro interno ao sincronizar' };
   }
-}
+  }
+
+  /**
+  * Busca o status da instância do WhatsApp
+  */
+  export async function getWhatsAppStatusAction() {
+  try {
+  const client = EvolutionGoClient.getInstance();
+  const status = await client.getInstanceStatus();
+  return { success: true, status };
+  } catch (error) {
+  return { success: false, error: 'Falha ao buscar status' };
+  }
+  }
