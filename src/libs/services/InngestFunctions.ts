@@ -224,12 +224,12 @@ export const onWhatsAppWebhook = inngest.createFunction(
   { id: 'on-whatsapp-webhook', name: 'WhatsApp: Processar Webhook' },
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
-    const { event: eventName, data, instance } = event.data;
+    const { normalizedEvent, data, instance } = event.data;
     const instanceId = instance || data.instanceId;
 
     // Processamento de Mensagens
-    if (['Message', 'messages.upsert'].includes(eventName)) {
-      const messageData = eventName === 'messages.upsert' ? data.data : data;
+    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
+      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? data.data : data;
       
       const isFromMe = messageData.key?.fromMe;
       const sender = messageData.key?.remoteJid || messageData.sender;
@@ -251,21 +251,21 @@ export const onWhatsAppWebhook = inngest.createFunction(
       }
     }
 
-    // Processamento de Presença (Opcional, mas útil para logs)
-    if (['Presence', 'ChatPresence'].includes(eventName)) {
-       // Log de presença se desejar futuro monitoramento
+    // Processamento de Presença (Opcional)
+    if (['PRESENCE', 'CHAT_PRESENCE'].includes(normalizedEvent)) {
        return { status: 'presence_logged' };
     }
 
     // Processamento de Conexão
-    if (['Connected', 'connection.update', 'Logout', 'Disconnected'].includes(eventName)) {
+    if (['CONNECTION', 'CONNECTION_UPDATE', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
       await step.run('log-connection-state', async () => {
         const { NotificationService } = await import('./NotificationService');
-        const state = (eventName === 'Connected' || data.state === 'open') ? 'CONNECTED' : 'LOGGED_OUT';
+        const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || data.state === 'open';
+        const state = isConnected ? 'CONNECTED' : 'LOGGED_OUT';
         await NotificationService.logConnectionState(instanceId, state);
       });
     }
 
-    return { status: 'processed' };
+    return { status: 'processed', event: normalizedEvent };
   },
 );

@@ -15,29 +15,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
-    // Performance: Fast response for ignored events
+    // Evolution GO (Golang) uses short names like MESSAGE, CONNECTION
+    // We normalize everything to uppercase for comparison
+    const incomingEvent = (event || '').toUpperCase();
+
     const supportedEvents = [
-      'Message', 
-      'messages.upsert', 
-      'Connected', 
-      'connection.update',
-      'ChatPresence',
-      'Presence',
-      'Logout', 
-      'Disconnected'
+      'MESSAGE', 
+      'MESSAGES.UPSERT', 
+      'CONNECTION', 
+      'CONNECTION_UPDATE',
+      'CONNECTED',
+      'CHAT_PRESENCE',
+      'PRESENCE',
+      'QRCODE',
+      'LOGOUT', 
+      'DISCONNECTED'
     ];
 
-    if (!supportedEvents.includes(event)) {
-      return NextResponse.json({ status: 'ignored' });
+    if (!supportedEvents.includes(incomingEvent)) {
+      return NextResponse.json({ status: 'ignored', event: incomingEvent });
     }
 
+    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent}`);
+
     // Asynchronous hand-off to Inngest
-    // We send the whole body to ensure we have all context (instance, sender, etc)
     await inngest.send({
       name: 'whatsapp/webhook.received',
-      data: body,
+      data: {
+        ...body,
+        normalizedEvent: incomingEvent // Passamos o evento normalizado
+      },
     });
-
     // Respond immediately with 200 OK as per best practices
     return NextResponse.json({ success: true, processed: 'async' });
   } catch (error) {
