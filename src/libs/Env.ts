@@ -8,7 +8,7 @@ export const Env = createEnv({
     DATABASE_URL: z.string().min(1),
     EVOLUTION_API_KEY: z.string().min(1),
     EVOLUTION_INSTANCE: z.string().optional(),
-    EVOLUTION_BASE_URL: z.string().url().default('https://evolution-go-prd.up.railway.app'),
+    EVOLUTION_BASE_URL: z.string().url().default('https://evolution-go.up.railway.app'),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().optional(),

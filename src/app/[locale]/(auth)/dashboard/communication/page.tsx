@@ -142,8 +142,8 @@ export default function CommunicationPage() {
               {/* Dica de Throttling integrada ao fluxo (Fase 4) */}
               <Alert
                 type="info"
-                title="Throttling"
-                message="Intervalo de 2s ativo para proteger seu número."
+                title="Modo Seguro Ativo"
+                message="Throttling inteligente (8-20s) e pausas por lote automáticas para proteger seu número novo contra bloqueios."
                 className="mt-10 border-none p-4 shadow-none"
               />
             </div>
@@ -151,8 +151,8 @@ export default function CommunicationPage() {
             {/* Dica do Tech Lead unificada */}
             <Alert
               type="tip"
-              title="Dica Estratégica"
-              message="Utilize variáveis dinâmicas para aumentar a taxa de resposta dos seus discípulos."
+              title="Dica de Segurança"
+              message="Para números novos, adicione 'Responda SAIR para não receber mais' ao final da mensagem. Isso reduz denúncias de spam."
             />
           </div>
 

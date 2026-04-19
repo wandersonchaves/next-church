@@ -13,7 +13,7 @@ export class EvolutionGoClient {
   private readonly instanceName: string;
 
   private constructor() {
-    this.baseUrl = (Env.EVOLUTION_BASE_URL || 'https://evolution-go-prd.up.railway.app').replace(/\/$/, '');
+    this.baseUrl = (Env.EVOLUTION_BASE_URL || 'https://evolution-go.up.railway.app').replace(/\/$/, '');
     this.apiKey = Env.EVOLUTION_API_KEY?.replace(/['"]/g, '').trim();
     this.instanceName = (Env.EVOLUTION_INSTANCE || '').replace(/['"]/g, '').trim();
   }

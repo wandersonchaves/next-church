@@ -127,6 +127,9 @@ export const weeklyLeadershipReport = inngest.createFunction(
 
             await WhatsAppService.sendMessage(pastor.phone!, message, org.id);
           });
+          
+          // Pequeno atraso entre organizações para evitar picos
+          await step.sleep(`wait-org-${org.id}`, '3s');
         }
       }
     }
@@ -153,6 +156,10 @@ export const dailyBirthdayCheck = inngest.createFunction(
           const msg = `Feliz aniversário, ${member.firstName}! 🎉 Toda a família *${churchName}* celebra a sua vida hoje. Que Deus te abençoe grandemente! ✨`;
           await WhatsAppService.sendMessage(member.phone!, msg, member.organizationId);
         });
+
+        // Throttling para aniversariantes: 5-10s entre mensagens
+        const delay = Math.floor(Math.random() * 5 + 5);
+        await step.sleep(`wait-bday-${member.id}`, `${delay}s`);
       }
     }
   }
@@ -182,9 +189,12 @@ export const sendBroadcast = inngest.createFunction(
       return await db.select().from(members).where(and(...conditions));
     });
 
-    // 2. Envio individual com throttling
+    // 2. Envio individual com throttling e proteção de número novo
+    let count = 0;
     for (const member of recipients) {
       if (member.phone) {
+        count++;
+        
         // Personalização básica: substitui {name} pelo primeiro nome
         const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
 
@@ -192,8 +202,14 @@ export const sendBroadcast = inngest.createFunction(
           await WhatsAppService.sendMessage(member.phone!, personalizedMessage, organizationId);
         });
 
-        // Intervalo de segurança para não ser banido pelo WhatsApp (Throttling)
-        await step.sleep(`wait-${member.id}`, '2s');
+        // A cada 30 mensagens, faz uma pausa maior de 2 minutos (Batch cooldown)
+        if (count % 30 === 0) {
+          await step.sleep(`batch-pause-${count}`, '2m');
+        } else {
+          // Throttling agressivo e aleatório: entre 8 e 20 segundos por mensagem
+          const delay = Math.floor(Math.random() * 12 + 8);
+          await step.sleep(`wait-${member.id}`, `${delay}s`);
+        }
       }
     }
 
