@@ -152,9 +152,8 @@ export class EvolutionGoClient {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // Evolution GO uses POST /webhook/instance
-    // The instance is identified by the 'instance' header
-    const url = `${this.baseUrl}/webhook/instance`;
+    // Trying /webhook/set which is the most common v2 endpoint
+    const url = `${this.baseUrl}/webhook/set`;
 
     const body = {
       enabled: true,
@@ -184,18 +183,25 @@ export class EvolutionGoClient {
       });
 
       const rawText = await response.text();
-      
-      // Evolution API sometimes returns "true" or "{"status":200}"
-      // We check if it's a valid JSON or just a success string
-      let data;
-      try {
-        data = rawText ? JSON.parse(rawText) : { success: response.ok };
-      } catch {
-        // If it's not JSON (like the string "true"), we treat it as success if response was OK
-        data = { raw: rawText };
-      }
+      console.info(`[EVOLUTION_GO_SYNC] Status: ${response.status} | Body: ${rawText}`);
 
-      return { success: response.ok, data };
+      if (response.status === 404) {
+        // Se /webhook/set der 404, vamos tentar o /instance/setWebhook como fallback para Evolution GO
+        const fallbackUrl = `${this.baseUrl}/instance/setWebhook`;
+        const fallbackRes = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.apiKey,
+            'instance': this.instanceName
+          },
+          body: JSON.stringify(body),
+        });
+        const fallbackText = await fallbackRes.text();
+        return { success: fallbackRes.ok, data: fallbackText };
+      }
+      
+      return { success: response.ok, data: rawText };
     } catch (error) {
       console.error('[EVOLUTION_GO_WEBHOOK_SET_ERROR]', error);
       return { success: false, error: String(error) };
