@@ -38,6 +38,11 @@ export async function POST(req: Request) {
 
     console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent}`);
 
+    // Dica para Depuração "Elite": Logamos o objeto inteiro para inspeção no Railway
+    if (incomingEvent === 'MESSAGE' || incomingEvent === 'MESSAGES.UPSERT') {
+      console.log("📥 MENSAGEM RECEBIDA DO MEMBRO:", JSON.stringify(body, null, 2));
+    }
+
     // Asynchronous hand-off to Inngest
     await inngest.send({
       name: 'whatsapp/webhook.received',

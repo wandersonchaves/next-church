@@ -233,9 +233,14 @@ export const onWhatsAppWebhook = inngest.createFunction(
       
       const isFromMe = messageData.key?.fromMe;
       const sender = messageData.key?.remoteJid || messageData.sender;
+      
+      // Extração robusta de conteúdo (Conversation, Extended Text, etc)
       const content = messageData.message?.conversation || 
                       messageData.message?.extendedTextMessage?.text ||
-                      messageData.content;
+                      messageData.message?.imageMessage?.caption ||
+                      messageData.message?.videoMessage?.caption ||
+                      messageData.content || 
+                      "[Mídia/Formato não suportado]";
 
       if (isFromMe) return { status: 'ignored_from_me' };
 
@@ -244,7 +249,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
           const { NotificationService } = await import('./NotificationService');
           await NotificationService.saveIncomingMessage({
             sender,
-            content,
+            content: String(content),
             instanceId,
           });
         });
