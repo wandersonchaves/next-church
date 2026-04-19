@@ -148,62 +148,54 @@ export class EvolutionGoClient {
 
   /**
    * Configures the webhook for the current instance.
-   * Optimized for Evolution GO (Golang) v2.
+   * Optimized for Evolution GO (Golang) v2 based on official docs.
    */
   public async setWebhook(webhookUrl: string) {
     if (!this.apiKey || !this.instanceName) {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // Na Evolution GO v2, o endpoint principal é /webhook/set
-    // Tentamos também variações comuns se a primeira falhar
-    const endpoints = [
-      `${this.baseUrl}/webhook/set`,
-      `${this.baseUrl}/webhook/set/${this.instanceName}`,
-      `${this.baseUrl}/instance/webhook/set/${this.instanceName}`
-    ];
+    // De acordo com a documentação enviada, o endpoint correto é /webhook/instance
+    const url = `${this.baseUrl}/webhook/instance`;
 
     const body = {
       url: webhookUrl,
       enabled: true,
-      // Alguns campos opcionais que a v2 pode exigir ou ignorar
       webhook_by_events: false,
+      webhook_base64: false,
       events: [
-        'MESSAGE',
-        'MESSAGES_UPSERT', // Algumas versões usam este nome
-        'CONNECTION',
-        'TYPE_MESSAGE',
-        'RECEIPT'
+        'QRCODE_UPDATED',
+        'MESSAGES_UPSERT',
+        'MESSAGES_UPDATE',
+        'MESSAGES_DELETE',
+        'SEND_MESSAGE',
+        'CONNECTION_UPDATE',
+        'TYPEBOT_START'
       ]
     };
 
-    let lastError = '';
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.apiKey,
+          'instance': this.instanceName
+        },
+        body: JSON.stringify(body),
+      });
 
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': this.apiKey,
-            'instance': this.instanceName
-          },
-          body: JSON.stringify(body),
-        });
+      const rawText = await response.text();
+      console.info(`[EVOLUTION_GO_SYNC] URL: ${url} | Status: ${response.status} | Body: ${rawText}`);
 
-        const rawText = await response.text();
-        console.info(`[EVOLUTION_GO_SYNC] URL: ${url} | Status: ${response.status} | Body: ${rawText}`);
-
-        if (response.ok) {
-          return { success: true, data: rawText };
-        }
-        lastError = rawText;
-      } catch (error) {
-        console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
-        lastError = String(error);
+      if (response.ok) {
+        return { success: true, data: rawText };
       }
+      
+      return { success: false, error: `Erro ${response.status}: ${rawText}` };
+    } catch (error) {
+      console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
+      return { success: false, error: String(error) };
     }
-
-    return { success: false, error: `Falha na sincronização: ${lastError}` };
   }
 }
