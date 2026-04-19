@@ -35,8 +35,11 @@ export default async function proxy(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
-  // 1. BYPASS TOTAL PARA INNGEST (API NÃO USA I18N NEM CLERK)
-  if (request.nextUrl.pathname.startsWith('/api/inngest')) {
+  // 1. BYPASS TOTAL PARA APIS EXTERNAS (NÃO USAM I18N NEM CLERK)
+  if (
+    request.nextUrl.pathname.startsWith('/api/inngest') ||
+    request.nextUrl.pathname.startsWith('/api/webhooks/evolution')
+  ) {
     return NextResponse.next();
   }
 
