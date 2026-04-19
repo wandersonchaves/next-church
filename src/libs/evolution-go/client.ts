@@ -145,58 +145,42 @@ export class EvolutionGoClient {
 
   /**
    * Configures the webhook for the current instance.
-   * Based on the provided Evolution API documentation.
+   * Optimized for Evolution GO (Golang) as shown in the user's dashboard.
    */
   public async setWebhook(webhookUrl: string) {
     if (!this.apiKey || !this.instanceName) {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // O endpoint exato da documentação
-    const url = `${this.baseUrl}/webhook/instance`;
+    // Estratégia para Evolution GO: Tentamos os caminhos de roteamento do Go
+    const endpoints = [
+      `${this.baseUrl}/instance/webhook/set/${this.instanceName}`,
+      `${this.baseUrl}/webhook/set/${this.instanceName}`,
+      `${this.baseUrl}/webhook/instance/${this.instanceName}`,
+      `${this.baseUrl}/instance/${this.instanceName}/webhook`
+    ];
 
-    // Payload seguindo fielmente o exemplo da documentação
-    // Adicionamos 'instance' e 'enabled' conforme a tabela de parâmetros
+    // Eventos conforme aparecem no Dashboard do usuário (Nomes curtos e maiúsculos)
     const body = {
-      instance: this.instanceName,
       enabled: true,
       url: webhookUrl,
       webhook_by_events: false,
       webhook_base64: false,
       events: [
-        'QRCODE_UPDATED',
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'MESSAGES_DELETE',
-        'SEND_MESSAGE',
-        'CONNECTION_UPDATE',
-        'TYPEBOT_START',
-        'TYPEBOT_CHANGE_STATUS'
+        'MESSAGE',
+        'CONNECTION',
+        'QRCODE',
+        'CONTACT',
+        'GROUP',
+        'CALL',
+        'PRESENCE'
       ]
     };
 
-    try {
-      console.info(`[EVOLUTION_GO_SYNC] Attempting sync at: ${url}`);
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': this.apiKey,
-          'instance': this.instanceName // Mantemos no header também por segurança
-        },
-        body: JSON.stringify(body),
-      });
-
-      const rawText = await response.text();
-      console.info(`[EVOLUTION_GO_SYNC] Response Status: ${response.status} | Body: ${rawText}`);
-
-      // Se o endpoint oficial retornar 404, tentamos a variação com a instância na URL
-      // que é comum na Evolution GO: /webhook/instance/{instance}
-      if (response.status === 404) {
-        const altUrl = `${this.baseUrl}/webhook/instance/${this.instanceName}`;
-        console.info(`[EVOLUTION_GO_SYNC] 404 on official. Trying: ${altUrl}`);
-        
-        const altResponse = await fetch(altUrl, {
+    for (const url of endpoints) {
+      try {
+        console.info(`[EVOLUTION_GO_SYNC] Trying Evolution GO endpoint: ${url}`);
+        const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -204,15 +188,18 @@ export class EvolutionGoClient {
           },
           body: JSON.stringify(body),
         });
-        
-        const altText = await altResponse.text();
-        return { success: altResponse.ok, data: altText };
-      }
 
-      return { success: response.ok, data: rawText };
-    } catch (error) {
-      console.error('[EVOLUTION_GO_WEBHOOK_SET_ERROR]', error);
-      return { success: false, error: String(error) };
+        const rawText = await response.text();
+        console.info(`[EVOLUTION_GO_SYNC] URL: ${url} | Status: ${response.status} | Body: ${rawText}`);
+
+        if (response.ok) {
+          return { success: true, data: rawText };
+        }
+      } catch (error) {
+        console.error(`[EVOLUTION_GO_SYNC_ERROR] Failed for ${url}:`, error);
+      }
     }
+
+    return { success: false, error: 'Não foi possível encontrar o endpoint de Webhook. Verifique a URL da API.' };
   }
 }
