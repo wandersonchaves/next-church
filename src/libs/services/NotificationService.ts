@@ -90,5 +90,22 @@ export const NotificationService = {
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_ERROR] Failed to log state change:', error);
     }
-  }
+  },
+
+  /**
+   * Fetches recent incoming messages for an organization.
+   */
+  async getIncomingMessages(organizationId: string, limit = 50) {
+    return await db.query.notificationLogs.findMany({
+      where: and(
+        eq(notificationLogs.organizationId, organizationId),
+        eq(notificationLogs.type, 'WHATSAPP_INCOMING')
+      ),
+      orderBy: (notificationLogs, { desc }) => [desc(notificationLogs.sentAt)],
+      limit,
+      with: {
+        member: true,
+      },
+    });
+  },
 };

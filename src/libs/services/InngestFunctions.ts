@@ -216,3 +216,50 @@ export const sendBroadcast = inngest.createFunction(
     return { totalSent: recipients.length };
   },
 );
+
+/**
+ * Evento: Processamento Assíncrono de Webhook (WhatsApp).
+ */
+export const onWhatsAppWebhook = inngest.createFunction(
+  { id: 'on-whatsapp-webhook', name: 'WhatsApp: Processar Webhook' },
+  { event: 'whatsapp/webhook.received' },
+  async ({ event, step }) => {
+    const { event: eventName, data, instance } = event.data;
+    const instanceId = instance || data.instanceId;
+
+    // Processamento de Mensagens
+    if (eventName === 'Message' || eventName === 'messages.upsert') {
+      const messageData = eventName === 'messages.upsert' ? data.data : data;
+      
+      const isFromMe = messageData.key?.fromMe;
+      const sender = messageData.key?.remoteJid || messageData.sender;
+      const content = messageData.message?.conversation || 
+                      messageData.message?.extendedTextMessage?.text ||
+                      messageData.content;
+
+      if (isFromMe) return { status: 'ignored_from_me' };
+
+      if (sender && content) {
+        await step.run('save-incoming-message', async () => {
+          const { NotificationService } = await import('./NotificationService');
+          await NotificationService.saveIncomingMessage({
+            sender,
+            content,
+            instanceId,
+          });
+        });
+      }
+    }
+
+    // Processamento de Conexão
+    if (['Connected', 'connection.update', 'Logout', 'Disconnected'].includes(eventName)) {
+      await step.run('log-connection-state', async () => {
+        const { NotificationService } = await import('./NotificationService');
+        const state = (eventName === 'Connected' || data.state === 'open') ? 'CONNECTED' : 'LOGGED_OUT';
+        await NotificationService.logConnectionState(instanceId, state);
+      });
+    }
+
+    return { status: 'processed' };
+  },
+);

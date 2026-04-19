@@ -1,11 +1,14 @@
 'use client';
 
-import { Filter, Info, Loader2, Send } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
 import { sendBroadcastAction } from './actions';
+import Link from 'next/link';
+import { useLocale } from 'next-intl';
 
 export default function CommunicationPage() {
+  const locale = useLocale();
   const [message, setMessage] = React.useState('');
   const [step, setStep] = React.useState('');
   const [generation, setGeneration] = React.useState('');
@@ -43,14 +46,24 @@ export default function CommunicationPage() {
       <div className="mx-auto max-w-350 space-y-8">
 
         {/* HEADER UNIFICADO */}
-        <header className="flex items-center gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
-          <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-lg shadow-indigo-100">
-            <Send size={24} />
+        <header className="flex items-center justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-lg shadow-indigo-100">
+              <Send size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl leading-none font-black tracking-tight text-slate-900 uppercase">Hub de Comunicação</h1>
+              <p className="mt-1.5 text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">Mensageria Estratégica</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl leading-none font-black tracking-tight text-slate-900 uppercase">Hub de Comunicação</h1>
-            <p className="mt-1.5 text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">Mensageria Estratégica</p>
-          </div>
+
+          <Link 
+            href={`/${locale}/dashboard/communication/inbox`}
+            className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <MessageSquare size={16} />
+            Inbox
+          </Link>
         </header>
 
         {/* CONTÊINER PRINCIPAL COM FLEX WRAP (Fase 4) */}

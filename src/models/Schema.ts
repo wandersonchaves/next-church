@@ -120,3 +120,17 @@ export const auditLogs = pgTable('audit_logs', {
   index('audit_org_idx').on(table.organizationId),
   index('audit_created_idx').on(table.createdAt),
 ]);
+
+// --- RELATIONS ---
+import { relations } from 'drizzle-orm';
+
+export const membersRelations = relations(members, ({ many }) => ({
+  notifications: many(notificationLogs),
+}));
+
+export const notificationLogsRelations = relations(notificationLogs, ({ one }) => ({
+  member: one(members, {
+    fields: [notificationLogs.memberId],
+    references: [members.id],
+  }),
+}));
