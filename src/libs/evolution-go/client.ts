@@ -152,8 +152,9 @@ export class EvolutionGoClient {
       return { success: false, error: 'Instance or API Key not configured' };
     }
 
-    // Evolution v2 uses POST /webhook/set/{instance}
-    const url = `${this.baseUrl}/webhook/set/${this.instanceName}`;
+    // Evolution GO uses POST /webhook/instance
+    // The instance is identified by the 'instance' header
+    const url = `${this.baseUrl}/webhook/instance`;
 
     const body = {
       enabled: true,
