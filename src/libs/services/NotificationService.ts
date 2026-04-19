@@ -126,7 +126,7 @@ export const NotificationService = {
    * Fetches recent incoming messages for an organization.
    */
   async getIncomingMessages(organizationId: string, limit = 50) {
-    return await db.query.notificationLogs.findMany({
+    const results = await db.query.notificationLogs.findMany({
       where: and(
         eq(notificationLogs.organizationId, organizationId),
         eq(notificationLogs.type, 'WHATSAPP_INCOMING')
@@ -137,5 +137,8 @@ export const NotificationService = {
         member: true,
       },
     });
+
+    console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}`);
+    return results;
   },
 };
