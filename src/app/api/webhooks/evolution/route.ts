@@ -57,6 +57,8 @@ export async function POST(req: Request) {
         Info: body.data?.Info ? {
           ID: body.data.Info.ID,
           Sender: body.data.Info.Sender,
+          Chat: body.data.Info.Chat,
+          IsGroup: body.data.Info.IsGroup,
           IsFromMe: body.data.Info.IsFromMe,
           Timestamp: body.data.Info.Timestamp,
           Type: body.data.Info.Type,

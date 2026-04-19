@@ -237,10 +237,24 @@ export const onWhatsAppWebhook = inngest.createFunction(
       
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
       const sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
+      const chat = messageData.Info?.Chat || sender;
+      const isGroup = messageData.Info?.IsGroup || sender?.includes('@g.us') || chat?.includes('@g.us');
+      const isStatusOrNewsletter = chat?.includes('status') || chat?.includes('newsletter');
       
       // Evolution Go (v2) uses capitalized "Message", while Baileys/v1 uses "message"
       const msg = messageData.message || messageData.Message;
       
+      // Filtros de Segurança: Ignoramos grupos, newsletters e mensagens próprias
+      if (isGroup || isStatusOrNewsletter) {
+        console.log(`[INNGEST] Ignoring group/newsletter/status message from: ${sender}`);
+        return { status: 'ignored_group_or_newsletter' };
+      }
+
+      if (isFromMe) {
+        console.log(`[INNGEST] Ignoring message from self: ${sender}`);
+        return { status: 'ignored_from_me' };
+      }
+
       // Extração robusta de conteúdo (Conversation, Extended Text, etc)
       let content = msg?.conversation || 
                       msg?.extendedTextMessage?.text ||
@@ -255,13 +269,6 @@ export const onWhatsAppWebhook = inngest.createFunction(
       }
 
       if (!content) content = "[Mídia ou Formato não suportado]";
-
-      // Se for mensagem enviada por mim (IsFromMe), opcionalmente podemos querer logar 
-      // mas por padrão ignoramos para não poluir o Inbox de mensagens recebidas.
-      if (isFromMe) {
-        console.log(`[INNGEST] Ignoring message from self: ${sender}`);
-        return { status: 'ignored_from_me' };
-      }
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
