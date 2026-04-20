@@ -2,7 +2,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Usamos --legacy-peer-deps para resolver conflitos de plugins do ESLint identificados no log
+RUN npm ci --legacy-peer-deps
 
 # 2. Build
 FROM node:22-alpine AS builder
@@ -10,9 +11,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Variáveis de ambiente necessárias para o build do Next.js
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV NODE_ENV production
+# Variáveis de ambiente com formato moderno key=value
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
 
 RUN npm run build
 
@@ -20,8 +21,8 @@ RUN npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Cria usuário não-root para segurança
 RUN addgroup --system --gid 1001 nodejs
@@ -32,15 +33,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copia as migrações para o drizzle-kit push se necessário
+# Copia as migrações e o drizzle-kit para execução no start
+# Nota: drizzle-kit precisa estar disponível. Como usamos standalone, copiamos o necessário.
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/node_modules/drizzle-kit ./node_modules/drizzle-kit
+COPY --from=builder /app/node_modules/typescript ./node_modules/typescript
 
 USER nextjs
 
 EXPOSE 8080
-ENV PORT 8080
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=8080
+ENV HOSTNAME="0.0.0.0"
 
-# Comando para rodar as migrações e iniciar
-CMD npx drizzle-kit push --force && node server.js
+# Comando no formato JSON recomendado para lidar corretamente com sinais do SO
+CMD ["sh", "-c", "npx drizzle-kit push --force && node server.js"]
