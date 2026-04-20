@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { inngest } from '@/libs/Inngest';
+import { NotificationService } from '@/libs/services/NotificationService';
 
 /**
  * Evolution GO v2 Webhook Handler
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored', event: incomingEvent });
     }
 
-    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent} for Instance: ${body.instanceName}`);
+    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent} from ${sender}`);
 
     // Smart Sanitization: Remove heavy fields but keep structure for Inbox and Linking
     const sanitizedData = {
@@ -98,7 +99,36 @@ export async function POST(req: Request) {
       } : undefined
     };
 
-    // Asynchronous hand-off to Inngest
+    // 🚀 SALVAMENTO DIRETO (BACKGROUND)
+    // Se for uma mensagem, salvamos imediatamente no banco sem esperar o Inngest
+    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(incomingEvent)) {
+      // No sanitizedData.data, já temos a estrutura limpa
+      const messageData = sanitizedData.data;
+      const msg = messageData?.Message;
+
+      const content = msg?.conversation || 
+                      msg?.extendedTextMessage?.text ||
+                      msg?.imageMessage?.caption ||
+                      msg?.videoMessage?.caption;
+
+      const externalId = messageData?.Info?.ID || messageData?.key?.id;
+      const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
+      const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
+
+      if (content && sender) {
+        // Fire and forget: Não damos await para não travar a resposta do webhook
+        NotificationService.saveIncomingMessage({
+          sender: String(sender),
+          content: String(content),
+          instanceId: String(body.instanceId || ''),
+          instanceName: String(body.instanceName || ''),
+          externalId: String(externalId || ''),
+          parentExternalId: String(parentExternalId || ''),
+        }).catch(e => console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e));
+      }
+    }
+
+    // Mantemos o Inngest para outros processamentos assíncronos (logs de conexão, etc)
     try {
       await inngest.send({
         name: 'whatsapp/webhook.received',
@@ -107,16 +137,14 @@ export async function POST(req: Request) {
           normalizedEvent: incomingEvent 
         },
       });
-      console.info(`[EVOLUTION_GO_WEBHOOK] Event ${incomingEvent} sent to Inngest successfully`);
     } catch (inngestError) {
-      console.error(`[EVOLUTION_GO_WEBHOOK] Failed to send to Inngest:`, inngestError);
+      console.error(`[EVOLUTION_GO_WEBHOOK] Inngest Dispatch Failed:`, inngestError);
     }
 
     // Respond immediately with 200 OK as per best practices
-    return NextResponse.json({ success: true, processed: 'async' });
+    return NextResponse.json({ success: true, processed: 'direct+async' });
   } catch (error) {
     console.error('[EVOLUTION_GO_WEBHOOK_CRITICAL_ERROR]', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
