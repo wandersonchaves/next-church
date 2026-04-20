@@ -224,20 +224,32 @@ export const onWhatsAppWebhook = inngest.createFunction(
   { id: 'on-whatsapp-webhook', name: 'WhatsApp: Processar Webhook' },
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
-    const { normalizedEvent, data, instanceId: eventInstanceId, instanceName: eventInstanceName } = event.data;
-    const instanceId = eventInstanceId || data?.instanceId || data?.data?.instanceId;
-    const instanceName = eventInstanceName || data?.instanceName || data?.data?.instanceName;
+    // Pegamos do data (que contém o body do webhook) ou diretamente do payload do evento
+    const payload = event.data;
+    const normalizedEvent = payload.normalizedEvent || (payload.event || '').toUpperCase();
+    
+    // Extração robusta de instância (Pode estar no topo ou dentro de data)
+    const instanceId = payload.instanceId || payload.data?.instanceId || payload.data?.data?.instanceId;
+    const instanceName = payload.instanceName || payload.data?.instanceName || payload.data?.data?.instanceName;
 
     console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
 
     // Processamento de Mensagens
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
-      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? data.data : data;
+      // Evolution v2 envia os dados no topo do payload.data se for MESSAGE
+      // Baileys v1 envia em data.data se for UPSERT
+      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? payload.data?.data : payload.data;
       
-      console.log(`[INNGEST] Message Data extracted, sender: ${messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender}`);
+      if (!messageData) {
+        console.warn('[INNGEST] No message data found in payload');
+        return { status: 'no_data' };
+      }
+
+      const senderJid = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
+      console.log(`[INNGEST] Message Data extracted, sender: ${senderJid}`);
       
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
-      let sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
+      let sender = senderJid;
       const chat = messageData.Info?.Chat || sender;
 
       // Normalização de Sender: Se não tiver @ e terminar com .net, provavelmente é um JID malformado da v2
@@ -284,8 +296,8 @@ export const onWhatsAppWebhook = inngest.createFunction(
           await NotificationService.saveIncomingMessage({
             sender,
             content: String(content),
-            instanceId,
-            instanceName,
+            instanceId: String(instanceId),
+            instanceName: String(instanceName),
           });
         });
       }
@@ -300,9 +312,9 @@ export const onWhatsAppWebhook = inngest.createFunction(
     if (['CONNECTION', 'CONNECTION_UPDATE', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
       await step.run('log-connection-state', async () => {
         const { NotificationService } = await import('./NotificationService');
-        const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || data.state === 'open';
+        const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || payload.data?.state === 'open';
         const state = isConnected ? 'CONNECTED' : 'LOGGED_OUT';
-        await NotificationService.logConnectionState(instanceId, state, undefined, instanceName);
+        await NotificationService.logConnectionState(String(instanceId), state, undefined, String(instanceName));
       });
     }
 
