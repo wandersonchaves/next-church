@@ -31,7 +31,14 @@ export const NotificationService = {
   /**
    * Persists an incoming message from Evolution GO.
    */
-  async saveIncomingMessage(data: { sender: string; content: string; instanceId: string; instanceName?: string }) {
+  async saveIncomingMessage(data: { 
+    sender: string; 
+    content: string; 
+    instanceId: string; 
+    instanceName?: string;
+    externalId?: string;
+    parentExternalId?: string;
+  }) {
     // Extrai o identificador antes do @ ou usa o sender inteiro se não houver @
     const senderId = data.sender.includes('@') ? data.sender.split('@')[0] : data.sender;
     const member = await this.findMemberByPhone(data.sender);
@@ -77,18 +84,27 @@ export const NotificationService = {
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
         content: `${!member ? `[De: ${senderId}] ` : ''}${data.content}`,
+        externalId: data.externalId,
+        parentExternalId: data.parentExternalId,
         sentAt: new Date(),
       }).returning();
 
-      console.log(`[NOTIFICATION_SERVICE] Message saved successfully. ID: ${result[0]?.id} for Org: ${orgId}`);
+      console.log(`[NOTIFICATION_SERVICE] Message saved successfully. ID: ${result[0]?.id} for Org: ${orgId}${data.parentExternalId ? ` (Replied to: ${data.parentExternalId})` : ''}`);
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_ERROR] Failed to save message:', error);
     }
   },
+
   /**
    * Persists an outgoing message.
    */
-  async saveOutgoingMessage(data: { phone: string; content: string; organizationId: string; status: 'SENT' | 'FAILED' }) {
+  async saveOutgoingMessage(data: { 
+    phone: string; 
+    content: string; 
+    organizationId: string; 
+    status: 'SENT' | 'FAILED';
+    externalId?: string;
+  }) {
     const member = await this.findMemberByPhone(data.phone);
 
     if (!member) return;
@@ -100,12 +116,14 @@ export const NotificationService = {
         type: 'WHATSAPP_OUTGOING',
         status: data.status,
         content: data.content,
+        externalId: data.externalId,
         sentAt: new Date(),
       });
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_ERROR] Failed to save outgoing log:', error);
     }
   },
+
 
   /**
    * Logs connection state changes in the audit log.

@@ -90,6 +90,8 @@ export const notificationLogs = pgTable('notification_logs', {
   type: varchar('type', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull(),
   content: text('content').notNull(),
+  externalId: text('external_id'), // ID da mensagem no WhatsApp (ex: 3AC2ACC2...)
+  parentExternalId: text('parent_external_id'), // ID da mensagem que está sendo respondida (quoted)
   sentAt: timestamp('sent_at', { mode: 'date' }).defaultNow().notNull(),
 });
 

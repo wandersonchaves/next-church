@@ -290,6 +290,11 @@ export const onWhatsAppWebhook = inngest.createFunction(
 
       if (!content) content = "[Mídia ou Formato não suportado]";
 
+      // Extração de IDs para vínculo
+      const externalId = messageData.key?.id ?? messageData.Info?.ID;
+      const contextInfo = msg?.extendedTextMessage?.contextInfo || messageData.messageContextInfo;
+      const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
+
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
           const { NotificationService } = await import('./NotificationService');
@@ -298,6 +303,8 @@ export const onWhatsAppWebhook = inngest.createFunction(
             content: String(content),
             instanceId: String(instanceId),
             instanceName: String(instanceName),
+            externalId: String(externalId || ''),
+            parentExternalId: String(parentExternalId || ''),
           });
         });
       }

@@ -1,8 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
 import { setRequestLocale } from 'next-intl/server';
-import { MessageSquare, User, Clock, Phone, ChevronRight } from 'lucide-react';
+import { MessageSquare, User, Clock, Phone, ChevronRight, Reply } from 'lucide-react';
 import { NotificationService } from '@/libs/services/NotificationService';
 import Link from 'next/link';
+import { db } from '@/libs/DB';
+import { notificationLogs } from '@/models/Schema';
+import { inArray } from 'drizzle-orm';
 
 export default async function InboxPage(props: { params: Promise<{ locale: string }> }) {
   const { locale } = await props.params;
@@ -12,6 +15,19 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
   if (!orgId) return null;
 
   const messages = await NotificationService.getIncomingMessages(orgId);
+  
+  // Busca mensagens originais (quotes) para dar contexto
+  const parentIds = messages
+    .map(m => (m as any).parentExternalId)
+    .filter(Boolean);
+    
+  const parentMessages = parentIds.length > 0 
+    ? await db.select().from(notificationLogs).where(inArray(notificationLogs.externalId, parentIds))
+    : [];
+
+  const getParentContent = (parentId: string) => {
+    return parentMessages.find(pm => pm.externalId === parentId)?.content;
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 font-sans lg:p-8">
@@ -38,7 +54,7 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
 
         {/* MESSAGES LIST */}
         <div className="space-y-4">
-          {messages.map((msg) => (
+          {messages.map((msg: any) => (
             <div
               key={msg.id}
               className="group flex flex-col gap-4 rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-lg transition-all hover:border-indigo-200 hover:shadow-xl sm:flex-row sm:items-center"
@@ -60,10 +76,20 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
               </div>
 
               {/* MESSAGE CONTENT */}
-              <div className="flex-1 rounded-2xl bg-slate-50 p-4 transition-colors group-hover:bg-indigo-50/50">
-                <p className="text-sm font-medium leading-relaxed text-slate-600">
-                  {msg.content}
-                </p>
+              <div className="flex-1 space-y-2 overflow-hidden">
+                {msg.parentExternalId && (
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-50/50 px-3 py-1.5 text-[10px] font-bold text-slate-400 italic">
+                    <Reply size={10} className="rotate-180" />
+                    <span className="truncate">
+                      Resposta a: {getParentContent(msg.parentExternalId) || `Mensagem [${msg.parentExternalId.slice(-6)}]`}
+                    </span>
+                  </div>
+                )}
+                <div className="rounded-2xl bg-slate-50 p-4 transition-colors group-hover:bg-indigo-50/50">
+                  <p className="text-sm font-medium leading-relaxed text-slate-600">
+                    {msg.content}
+                  </p>
+                </div>
               </div>
 
               {/* METADATA */}

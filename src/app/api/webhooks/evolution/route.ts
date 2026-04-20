@@ -38,12 +38,55 @@ export async function POST(req: Request) {
 
     console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent} for Instance: ${body.instanceName}`);
 
+    // Smart Sanitization: Remove heavy fields but keep structure for Inbox and Linking
+    const sanitizedData = {
+      event: body.event,
+      instanceId: body.instanceId,
+      instanceName: body.instanceName,
+      data: body.data ? {
+        event: body.data.event,
+        instanceId: body.data.instanceId,
+        instanceName: body.data.instanceName,
+        // Informações da Mensagem
+        Info: body.data.Info ? {
+          ID: body.data.Info.ID,
+          Sender: body.data.Info.Sender,
+          Chat: body.data.Info.Chat,
+          IsGroup: body.data.Info.IsGroup,
+          IsFromMe: body.data.Info.IsFromMe,
+          Timestamp: body.data.Info.Timestamp,
+          Type: body.data.Info.Type,
+          PushName: body.data.Info.PushName,
+        } : undefined,
+        // Estrutura de Mensagem
+        Message: body.data.Message ? {
+          conversation: body.data.Message.conversation,
+          extendedTextMessage: body.data.Message.extendedTextMessage ? {
+            text: body.data.Message.extendedTextMessage.text,
+            contextInfo: body.data.Message.extendedTextMessage.contextInfo ? {
+              stanzaId: body.data.Message.extendedTextMessage.contextInfo.stanzaId,
+              participant: body.data.Message.extendedTextMessage.contextInfo.participant,
+              quotedMessage: body.data.Message.extendedTextMessage.contextInfo.quotedMessage,
+            } : undefined,
+          } : undefined,
+          imageMessage: body.data.Message.imageMessage ? { caption: body.data.Message.imageMessage.caption } : undefined,
+          videoMessage: body.data.Message.videoMessage ? { caption: body.data.Message.videoMessage.caption } : undefined,
+        } : undefined,
+        // Fallbacks
+        key: body.data.key ? {
+          remoteJid: body.data.key.remoteJid,
+          fromMe: body.data.key.fromMe,
+          id: body.data.key.id,
+        } : undefined,
+      } : undefined
+    };
+
     // Asynchronous hand-off to Inngest
     try {
       await inngest.send({
         name: 'whatsapp/webhook.received',
         data: {
-          ...body,
+          ...sanitizedData,
           normalizedEvent: incomingEvent 
         },
       });

@@ -68,6 +68,9 @@ export class EvolutionGoClient {
       }
 
       const data = JSON.parse(rawResponseText);
+      
+      // Evolution GO v2 costuma retornar Info.ID ou data.id
+      const externalId = data.Info?.ID || data.data?.id || data.key?.id;
 
       if (organizationId) {
         NotificationService.saveOutgoingMessage({
@@ -75,6 +78,7 @@ export class EvolutionGoClient {
           content: text,
           organizationId,
           status: 'SENT',
+          externalId: String(externalId || ''),
         }).catch(e => console.error('[EVOLUTION_GO_LOG_ERROR]', e));
       }
 
