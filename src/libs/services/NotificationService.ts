@@ -56,25 +56,39 @@ export const NotificationService = {
     parentExternalId?: string;
   }) {
     try {
-      if (!data.sender || !data.content) {
-        console.warn('[NOTIFICATION_SERVICE] Missing sender or content', data);
+      const sender = String(data.sender || '');
+      const content = String(data.content || '');
+      
+      if (!sender || !content) {
+        console.warn('[NOTIFICATION_SERVICE] Skip: Missing sender or content');
         return;
       }
 
-      // Extrai o identificador antes do @ ou usa o sender inteiro se não houver @
-      const senderId = String(data.sender).includes('@') ? String(data.sender).split('@')[0] : String(data.sender);
+      const senderId = sender.split('@')[0].replace(/\D/g, '');
+      console.log(`[NOTIFICATION_SERVICE] START: Processing message from ${senderId}`);
       
-      console.log(`[NOTIFICATION_SERVICE] Processing incoming message from: ${senderId}`);
+      // Busca direta de membro para evitar overhead de chamada de função se possível
+      const suffix = senderId.slice(-8);
+      const suffixWithNine = senderId.slice(-9);
+
+      const memberResults = await db
+        .select()
+        .from(members)
+        .where(
+          or(
+            ilike(members.phone, `%${suffix}`),
+            ilike(members.phone, `%${suffixWithNine}`)
+          )
+        )
+        .limit(1);
       
-      const member = await this.findMemberByPhone(data.sender);
+      const member = memberResults[0] || null;
+      let orgId: string | undefined = member?.organizationId;
 
-      // Fallback logic aprimorado
-      let orgId = member?.organizationId;
+      console.log(`[NOTIFICATION_SERVICE] STEP 1: Member found: ${member ? member.firstName : 'NO'}`);
 
+      // Fallback via Audit Logs se não achou membro
       if (!orgId) {
-        console.log(`[NOTIFICATION_SERVICE] Member NOT found for ${senderId}. Attempting fallback via Audit Logs for Instance: ${data.instanceId} or ${data.instanceName}`);
-
-        // Tentativa 1: Busca nos logs de auditoria pelo nome ou ID da instância
         const lastAudit = await db.query.auditLogs.findFirst({
           where: (audit, { or, ilike, and, eq }) => and(
             or(
@@ -85,46 +99,36 @@ export const NotificationService = {
           ),
           orderBy: (audit, { desc }) => [desc(audit.createdAt)],
         });
-
-        orgId = lastAudit?.organizationId;
-
-        if (orgId) {
-          console.log(`[NOTIFICATION_SERVICE] Fallback organization found in Audit Logs: ${orgId}`);
-        }
+        orgId = (lastAudit?.organizationId as string) || undefined;
       }
 
+      // Fallback final
       if (!orgId) {
-        // Tentativa 2: Fallback para a primeira organização do sistema (último recurso)
         const firstMember = await db.query.members.findFirst();
         orgId = firstMember?.organizationId || 'system';
-        console.warn(`[NOTIFICATION_SERVICE] CRITICAL: No organization found for message. Using fallback: ${orgId}`);
       }
 
-      console.log(`[NOTIFICATION_SERVICE] Attempting DB Insert for Org: ${orgId}, Member: ${member?.id || 'NONE'}`);
+      console.log(`[NOTIFICATION_SERVICE] STEP 2: Org resolved: ${orgId}. Inserting...`);
 
-      // Normaliza IDs para evitar strings vazias no banco
+      // Normaliza IDs
       const extId = data.externalId && String(data.externalId).trim() !== '' ? String(data.externalId) : null;
       const parentId = data.parentExternalId && String(data.parentExternalId).trim() !== '' ? String(data.parentExternalId) : null;
 
-      const result = await db.insert(notificationLogs).values({
+      const [inserted] = await db.insert(notificationLogs).values({
         organizationId: String(orgId),
         memberId: member?.id || null,
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
-        content: `${!member ? `[De: ${senderId}] ` : ''}${String(data.content)}`,
+        content: `${!member ? `[De: ${senderId}] ` : ''}${content}`,
         externalId: extId,
         parentExternalId: parentId,
         sentAt: new Date(),
       }).returning({ id: notificationLogs.id });
 
-      if (result && result.length > 0) {
-        console.log(`[NOTIFICATION_SERVICE] SUCCESS: Message saved with ID: ${result[0]?.id} for Org: ${orgId}`);
-      } else {
-        console.error(`[NOTIFICATION_SERVICE] FAILED: Insert returned no result for Org: ${orgId}`);
-      }
+      console.log(`[NOTIFICATION_SERVICE] STEP 3: SUCCESS! Message ID: ${inserted?.id}`);
     } catch (error) {
-      console.error('[NOTIFICATION_SERVICE_ERROR] Failed to save message:', error);
-      throw error; // Repassa para o Inngest tentar novamente se necessário
+      console.error('[NOTIFICATION_SERVICE_CRITICAL_ERROR]', error);
+      throw error;
     }
   },
 
