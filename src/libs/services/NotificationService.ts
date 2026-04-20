@@ -137,8 +137,6 @@ export const NotificationService = {
    * Fetches recent incoming messages for an organization.
    */
   async getIncomingMessages(organizationId: string, limit = 50) {
-    console.log("🚀 ~ organizationId:", organizationId)
-    console.log("🚀 ~ notificationLogs:", notificationLogs)
     const results = await db.query.notificationLogs.findMany({
       where: and(
         eq(notificationLogs.organizationId, organizationId),

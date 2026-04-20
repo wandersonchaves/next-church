@@ -7,14 +7,11 @@ import Link from 'next/link';
 export default async function InboxPage(props: { params: Promise<{ locale: string }> }) {
   const { locale } = await props.params;
   const { orgId } = await auth();
-  console.log("🚀 ~ InboxPage ~ orgId:", orgId)
   setRequestLocale(locale);
 
   if (!orgId) return null;
 
-  console.log(`[INBOX_PAGE] Fetching messages for Org: ${orgId}`);
   const messages = await NotificationService.getIncomingMessages(orgId);
-  console.log("🚀 ~ InboxPage ~ messages:", messages)
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 font-sans lg:p-8">
