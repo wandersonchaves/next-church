@@ -19,7 +19,7 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
   // Busca mensagens originais (quotes) para dar contexto
   const parentIds = messages
     .map(m => (m as any).parentExternalId)
-    .filter(Boolean);
+    .filter((id): id is string => typeof id === 'string' && id.trim() !== '');
     
   const parentMessages = parentIds.length > 0 
     ? await db.select().from(notificationLogs).where(inArray(notificationLogs.externalId, parentIds))

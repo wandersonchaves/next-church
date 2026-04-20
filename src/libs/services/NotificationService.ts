@@ -100,18 +100,28 @@ export const NotificationService = {
         console.warn(`[NOTIFICATION_SERVICE] CRITICAL: No organization found for message. Using fallback: ${orgId}`);
       }
 
+      console.log(`[NOTIFICATION_SERVICE] Attempting DB Insert for Org: ${orgId}, Member: ${member?.id || 'NONE'}`);
+
+      // Normaliza IDs para evitar strings vazias no banco
+      const extId = data.externalId && String(data.externalId).trim() !== '' ? String(data.externalId) : null;
+      const parentId = data.parentExternalId && String(data.parentExternalId).trim() !== '' ? String(data.parentExternalId) : null;
+
       const result = await db.insert(notificationLogs).values({
-        organizationId: orgId,
+        organizationId: String(orgId),
         memberId: member?.id || null,
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
-        content: `${!member ? `[De: ${senderId}] ` : ''}${data.content}`,
-        externalId: data.externalId || null,
-        parentExternalId: data.parentExternalId || null,
+        content: `${!member ? `[De: ${senderId}] ` : ''}${String(data.content)}`,
+        externalId: extId,
+        parentExternalId: parentId,
         sentAt: new Date(),
-      }).returning();
+      }).returning({ id: notificationLogs.id });
 
-      console.log(`[NOTIFICATION_SERVICE] Message saved successfully. ID: ${result[0]?.id} for Org: ${orgId}${data.parentExternalId ? ` (Replied to: ${data.parentExternalId})` : ''}`);
+      if (result && result.length > 0) {
+        console.log(`[NOTIFICATION_SERVICE] SUCCESS: Message saved with ID: ${result[0]?.id} for Org: ${orgId}`);
+      } else {
+        console.error(`[NOTIFICATION_SERVICE] FAILED: Insert returned no result for Org: ${orgId}`);
+      }
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_ERROR] Failed to save message:', error);
       throw error; // Repassa para o Inngest tentar novamente se necessário

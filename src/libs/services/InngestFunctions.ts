@@ -299,6 +299,9 @@ export const onWhatsAppWebhook = inngest.createFunction(
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
+          // Pequeno jitter de 0-500ms para evitar lock em testes com o mesmo telefone
+          await new Promise(resolve => setTimeout(resolve, Math.random() * 500));
+          
           const { NotificationService } = await import('./NotificationService');
           await NotificationService.saveIncomingMessage({
             sender,
