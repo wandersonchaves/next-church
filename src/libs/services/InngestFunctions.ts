@@ -6,6 +6,7 @@ import { WhatsAppService } from './WhatsAppService';
 import { getWeeklySummary } from './AuditService';
 import { clerkClient } from '@clerk/nextjs/server';
 import { AppConfig } from '@/utils/AppConfig';
+import { NotificationService } from './NotificationService';
 
 /**
  * Helper para buscar o nome da igreja no Clerk.
@@ -299,15 +300,11 @@ export const onWhatsAppWebhook = inngest.createFunction(
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
-          // Pequeno jitter de 0-500ms para evitar lock em testes com o mesmo telefone
-          await new Promise(resolve => setTimeout(resolve, Math.random() * 500));
-          
-          const { NotificationService } = await import('./NotificationService');
           await NotificationService.saveIncomingMessage({
             sender,
             content: String(content),
-            instanceId: String(instanceId),
-            instanceName: String(instanceName),
+            instanceId: String(instanceId || ''),
+            instanceName: String(instanceName || ''),
             externalId: String(externalId || ''),
             parentExternalId: String(parentExternalId || ''),
           });
@@ -315,18 +312,12 @@ export const onWhatsAppWebhook = inngest.createFunction(
       }
     }
 
-    // Processamento de Presença (Opcional)
-    if (['PRESENCE', 'CHAT_PRESENCE'].includes(normalizedEvent)) {
-       return { status: 'presence_logged' };
-    }
-
     // Processamento de Conexão
     if (['CONNECTION', 'CONNECTION_UPDATE', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
       await step.run('log-connection-state', async () => {
-        const { NotificationService } = await import('./NotificationService');
         const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || payload.data?.state === 'open';
         const state = isConnected ? 'CONNECTED' : 'LOGGED_OUT';
-        await NotificationService.logConnectionState(String(instanceId), state, undefined, String(instanceName));
+        await NotificationService.logConnectionState(String(instanceId || ''), state, undefined, String(instanceName || ''));
       });
     }
 
