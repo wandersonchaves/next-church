@@ -4,6 +4,7 @@ import {
   dailyBirthdayCheck,
   onMemberCreated,
   onStepCompleted,
+  onWhatsAppWebhook,
   sendBroadcast,
   weeklyLeadershipReport,
 } from '@/libs/services/InngestFunctions';
@@ -16,5 +17,6 @@ export const { GET, POST, PUT } = serve({
     onMemberCreated,
     dailyBirthdayCheck,
     weeklyLeadershipReport,
+    onWhatsAppWebhook,
   ],
 });

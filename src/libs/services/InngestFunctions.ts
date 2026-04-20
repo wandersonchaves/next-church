@@ -224,16 +224,17 @@ export const onWhatsAppWebhook = inngest.createFunction(
   { id: 'on-whatsapp-webhook', name: 'WhatsApp: Processar Webhook' },
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
-    const { normalizedEvent, data, instance } = event.data;
-    const instanceId = instance || data?.instanceId || data?.data?.instanceId;
+    const { normalizedEvent, data, instanceId: eventInstanceId, instanceName: eventInstanceName } = event.data;
+    const instanceId = eventInstanceId || data?.instanceId || data?.data?.instanceId;
+    const instanceName = eventInstanceName || data?.instanceName || data?.data?.instanceName;
 
-    console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId}`);
+    console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
 
     // Processamento de Mensagens
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
       const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? data.data : data;
       
-      console.log(`[INNGEST] Message Data extracted, keys present: ${Object.keys(messageData || {}).join(', ')}`);
+      console.log(`[INNGEST] Message Data extracted, sender: ${messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender}`);
       
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
       const sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
@@ -277,7 +278,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
             sender,
             content: String(content),
             instanceId,
-            instanceName: data?.instanceName || data?.data?.instanceName,
+            instanceName,
           });
         });
       }
@@ -294,7 +295,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
         const { NotificationService } = await import('./NotificationService');
         const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || data.state === 'open';
         const state = isConnected ? 'CONNECTED' : 'LOGGED_OUT';
-        await NotificationService.logConnectionState(instanceId, state);
+        await NotificationService.logConnectionState(instanceId, state, undefined, instanceName);
       });
     }
 

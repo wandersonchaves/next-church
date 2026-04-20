@@ -43,8 +43,8 @@ export const NotificationService = {
       // No futuro, isso deve vir de uma tabela 'whatsapp_instances'
       const lastAudit = await db.query.auditLogs.findFirst({
         where: (audit, { or, ilike }) => or(
-          ilike(audit.userName, `%${data.instanceId}%`),
-          ilike(audit.userName, `%${data.instanceName}%`)
+          data.instanceId ? ilike(audit.userName, `%${data.instanceId}%`) : undefined,
+          data.instanceName ? ilike(audit.userName, `%${data.instanceName}%`) : undefined
         ),
         orderBy: (audit, { desc }) => [desc(audit.createdAt)],
       });
@@ -99,7 +99,7 @@ export const NotificationService = {
   /**
    * Logs connection state changes in the audit log.
    */
-  async logConnectionState(instanceId: string, state: string, organizationId?: string) {
+  async logConnectionState(instanceId: string, state: string, organizationId?: string, instanceName?: string) {
     // Se não passar orgId, tenta o fallback (mas agora o syncWebhookAction passa)
     let orgId = organizationId;
     
@@ -112,7 +112,7 @@ export const NotificationService = {
       await db.insert(auditLogs).values({
         organizationId: orgId,
         userId: 'system-evolution-go',
-        userName: `Instance: ${instanceId}`,
+        userName: `Instance: ${instanceId}${instanceName ? ` (${instanceName})` : ''}`,
         action: 'UPDATE',
         entityType: 'TEAM',
         entityName: `WhatsApp Connection: ${state}`,
