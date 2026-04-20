@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { inngest } from '@/libs/Inngest';
 import { NotificationService } from '@/libs/services/NotificationService';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Evolution GO v2 Webhook Handler
  * Optimized for performance: Validates and hands off to Inngest immediately.
