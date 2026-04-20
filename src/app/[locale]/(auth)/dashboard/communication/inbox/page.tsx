@@ -7,17 +7,19 @@ import Link from 'next/link';
 export default async function InboxPage(props: { params: Promise<{ locale: string }> }) {
   const { locale } = await props.params;
   const { orgId } = await auth();
+  console.log("🚀 ~ InboxPage ~ orgId:", orgId)
   setRequestLocale(locale);
 
   if (!orgId) return null;
 
   console.log(`[INBOX_PAGE] Fetching messages for Org: ${orgId}`);
   const messages = await NotificationService.getIncomingMessages(orgId);
+  console.log("🚀 ~ InboxPage ~ messages:", messages)
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 font-sans lg:p-8">
       <div className="mx-auto max-w-5xl space-y-8">
-        
+
         {/* HEADER */}
         <header className="flex items-center justify-between gap-4 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-4">
@@ -29,7 +31,7 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
               <p className="mt-1.5 text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">Respostas do WhatsApp</p>
             </div>
           </div>
-          <Link 
+          <Link
             href={`/${locale}/dashboard/communication`}
             className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-[10px] font-black tracking-widest text-slate-600 uppercase transition-all hover:bg-slate-200"
           >
@@ -40,8 +42,8 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
         {/* MESSAGES LIST */}
         <div className="space-y-4">
           {messages.map((msg) => (
-            <div 
-              key={msg.id} 
+            <div
+              key={msg.id}
               className="group flex flex-col gap-4 rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-lg transition-all hover:border-indigo-200 hover:shadow-xl sm:flex-row sm:items-center"
             >
               {/* MEMBER INFO */}
