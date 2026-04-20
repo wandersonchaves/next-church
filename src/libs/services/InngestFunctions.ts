@@ -222,16 +222,18 @@ export const sendBroadcast = inngest.createFunction(
  * Evento: Processamento Assíncrono de Webhook (WhatsApp).
  */
 export const onWhatsAppWebhook = inngest.createFunction(
-  { id: 'on-whatsapp-webhook-v3', name: 'WhatsApp: Processar Webhook v3' },
+  { id: 'on-whatsapp-webhook-final', name: 'WhatsApp: Webhook Engine' },
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
+    console.log("🔥 [INNGEST_TRIGGER] Função iniciada com sucesso!");
+    
     // Pegamos do data (que contém o body do webhook) ou diretamente do payload do evento
     const payload = event.data;
     const normalizedEvent = (payload.normalizedEvent || payload.event || '').toUpperCase();
     
     // Extração robusta de instância (Pode estar no topo ou dentro de data)
-    const instanceId = payload.instanceId || payload.data?.instanceId;
-    const instanceName = payload.instanceName || payload.data?.instanceName;
+    const instanceId = payload.instanceId || payload.data?.instanceId || 'unknown';
+    const instanceName = payload.instanceName || payload.data?.instanceName || 'unknown';
 
     console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
 
