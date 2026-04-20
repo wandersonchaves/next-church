@@ -237,8 +237,14 @@ export const onWhatsAppWebhook = inngest.createFunction(
       console.log(`[INNGEST] Message Data extracted, sender: ${messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender}`);
       
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
-      const sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
+      let sender = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
       const chat = messageData.Info?.Chat || sender;
+
+      // Normalização de Sender: Se não tiver @ e terminar com .net, provavelmente é um JID malformado da v2
+      if (sender && !sender.includes('@') && sender.endsWith('.net')) {
+        sender = sender.replace('s.whatsapp.net', '@s.whatsapp.net');
+      }
+
       const isGroup = messageData.Info?.IsGroup || sender?.includes('@g.us') || chat?.includes('@g.us');
       const isStatusOrNewsletter = chat?.includes('status') || chat?.includes('newsletter');
       
@@ -257,6 +263,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
       }
 
       // Extração robusta de conteúdo (Conversation, Extended Text, etc)
+      // Evolution GO v2 coloca o texto em Message.conversation
       let content = msg?.conversation || 
                       msg?.extendedTextMessage?.text ||
                       msg?.imageMessage?.caption ||
