@@ -12,30 +12,27 @@ export const NotificationService = {
     try {
       if (!phone) return null;
       
-      // Remove tudo que não for dígito. 
-      const cleanPhone = String(phone).split('@')[0].replace(/\D/g, '');
+      // Limpeza profunda: mantém apenas números
+      const digits = String(phone).replace(/\D/g, '');
+      
+      // Se for JID internacional completo (ex: 5586994037788 ou 558694037788)
+      // Removemos o '55' inicial se existir para focar no número local
+      let localNumber = digits.startsWith('55') ? digits.slice(2) : digits;
+      
+      // Sufixo de 8 dígitos é a âncora mais segura para o Brasil
+      const suffix8 = localNumber.slice(-8);
 
-      if (cleanPhone.length < 8) return null;
+      console.log(`[NOTIFICATION_SERVICE] Member Lookup: Original=${phone}, Suffix8=${suffix8}`);
 
-      const suffix = cleanPhone.slice(-8);
-      const suffixWithNine = cleanPhone.slice(-9);
-
-      console.log(`[NOTIFICATION_SERVICE] Querying member for phone: ${cleanPhone} (Suffix: ${suffix})`);
-
-      // Usando db.select() em vez de db.query() para maior estabilidade e performance
+      // Busca por sufixo para ignorar o 9º dígito presente ou ausente
       const results = await db
         .select()
         .from(members)
-        .where(
-          or(
-            ilike(members.phone, `%${suffix}`),
-            ilike(members.phone, `%${suffixWithNine}`)
-          )
-        )
+        .where(ilike(members.phone, `%${suffix8}`))
         .limit(1);
       
       const member = results[0] || null;
-      console.log(`[NOTIFICATION_SERVICE] Member lookup result: ${member ? `${member.firstName} (ID: ${member.id})` : 'NOT FOUND'}`);
+      console.log(`[NOTIFICATION_SERVICE] Lookup Result: ${member ? `${member.firstName} (Org: ${member.organizationId})` : 'NOT FOUND'}`);
       
       return member;
     } catch (error) {
@@ -59,36 +56,18 @@ export const NotificationService = {
       const sender = String(data.sender || '');
       const content = String(data.content || '');
       
-      if (!sender || !content) {
-        console.warn('[NOTIFICATION_SERVICE] Skip: Missing sender or content');
-        return;
-      }
+      if (!sender || !content) return;
 
-      const senderId = sender.split('@')[0].replace(/\D/g, '');
-      console.log(`[NOTIFICATION_SERVICE] START: Processing message from ${senderId}`);
+      console.log(`[NOTIFICATION_SERVICE] >>> START: Message from ${sender}`);
       
-      // Busca direta de membro para evitar overhead de chamada de função se possível
-      const suffix = senderId.slice(-8);
-      const suffixWithNine = senderId.slice(-9);
-
-      const memberResults = await db
-        .select()
-        .from(members)
-        .where(
-          or(
-            ilike(members.phone, `%${suffix}`),
-            ilike(members.phone, `%${suffixWithNine}`)
-          )
-        )
-        .limit(1);
-      
-      const member = memberResults[0] || null;
+      const member = await this.findMemberByPhone(sender);
       let orgId: string | undefined = member?.organizationId;
 
-      console.log(`[NOTIFICATION_SERVICE] STEP 1: Member found: ${member ? member.firstName : 'NO'}`);
+      console.log(`[NOTIFICATION_SERVICE] >>> STEP 1: Member=${member ? member.firstName : 'NONE'}, Org=${orgId}`);
 
       // Fallback via Audit Logs se não achou membro
       if (!orgId) {
+        console.log(`[NOTIFICATION_SERVICE] Using Audit Log fallback for Instance: ${data.instanceName}`);
         const lastAudit = await db.query.auditLogs.findFirst({
           where: (audit, { or, ilike, and, eq }) => and(
             or(
@@ -102,13 +81,13 @@ export const NotificationService = {
         orgId = (lastAudit?.organizationId as string) || undefined;
       }
 
-      // Fallback final
+      // Fallback Final (último recurso)
       if (!orgId) {
         const firstMember = await db.query.members.findFirst();
         orgId = firstMember?.organizationId || 'system';
       }
 
-      console.log(`[NOTIFICATION_SERVICE] STEP 2: Org resolved: ${orgId}. Inserting...`);
+      console.log(`[NOTIFICATION_SERVICE] >>> STEP 2: Final Org=${orgId}. Inserting...`);
 
       // Normaliza IDs
       const extId = data.externalId && String(data.externalId).trim() !== '' ? String(data.externalId) : null;
@@ -119,13 +98,13 @@ export const NotificationService = {
         memberId: member?.id || null,
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
-        content: `${!member ? `[De: ${senderId}] ` : ''}${content}`,
+        content: `${!member ? `[De: ${sender.split('@')[0]}] ` : ''}${content}`,
         externalId: extId,
         parentExternalId: parentId,
         sentAt: new Date(),
       }).returning({ id: notificationLogs.id });
 
-      console.log(`[NOTIFICATION_SERVICE] STEP 3: SUCCESS! Message ID: ${inserted?.id}`);
+      console.log(`[NOTIFICATION_SERVICE] >>> STEP 3: SUCCESS! ID=${inserted?.id}`);
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_CRITICAL_ERROR]', error);
       throw error;
@@ -153,7 +132,7 @@ export const NotificationService = {
         type: 'WHATSAPP_OUTGOING',
         status: data.status,
         content: data.content,
-        externalId: data.externalId,
+        externalId: data.externalId || null,
         sentAt: new Date(),
       });
     } catch (error) {

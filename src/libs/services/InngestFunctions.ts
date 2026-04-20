@@ -221,16 +221,16 @@ export const sendBroadcast = inngest.createFunction(
  * Evento: Processamento Assíncrono de Webhook (WhatsApp).
  */
 export const onWhatsAppWebhook = inngest.createFunction(
-  { id: 'on-whatsapp-webhook', name: 'WhatsApp: Processar Webhook' },
+  { id: 'on-whatsapp-webhook-v3', name: 'WhatsApp: Processar Webhook v3' },
   { event: 'whatsapp/webhook.received' },
   async ({ event, step }) => {
     // Pegamos do data (que contém o body do webhook) ou diretamente do payload do evento
     const payload = event.data;
-    const normalizedEvent = payload.normalizedEvent || (payload.event || '').toUpperCase();
+    const normalizedEvent = (payload.normalizedEvent || payload.event || '').toUpperCase();
     
     // Extração robusta de instância (Pode estar no topo ou dentro de data)
-    const instanceId = payload.instanceId || payload.data?.instanceId || payload.data?.data?.instanceId;
-    const instanceName = payload.instanceName || payload.data?.instanceName || payload.data?.data?.instanceName;
+    const instanceId = payload.instanceId || payload.data?.instanceId;
+    const instanceName = payload.instanceName || payload.data?.instanceName;
 
     console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
 
@@ -238,7 +238,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
       // Evolution v2 envia os dados no topo do payload.data se for MESSAGE
       // Baileys v1 envia em data.data se for UPSERT
-      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? payload.data?.data : payload.data;
+      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? payload.data?.data : (payload.data || payload);
       
       if (!messageData) {
         console.warn('[INNGEST] No message data found in payload');

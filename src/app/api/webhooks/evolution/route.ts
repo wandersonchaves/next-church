@@ -16,8 +16,13 @@ export async function POST(req: Request) {
     }
 
     // Evolution GO (Golang) uses short names like MESSAGE, CONNECTION
-    // We normalize everything to uppercase for comparison
     const incomingEvent = (event || '').toUpperCase();
+
+    // Early Filter: Ignore events we don't care about or that are too noisy
+    const sender = data?.Info?.Sender || data?.key?.remoteJid || '';
+    if (sender.includes('@newsletter') || sender.includes('@status')) {
+      return NextResponse.json({ status: 'ignored_source', event: incomingEvent });
+    }
 
     const supportedEvents = [
       'MESSAGE', 
@@ -25,8 +30,6 @@ export async function POST(req: Request) {
       'CONNECTION', 
       'CONNECTION_UPDATE',
       'CONNECTED',
-      'CHAT_PRESENCE',
-      'PRESENCE',
       'QRCODE',
       'LOGOUT', 
       'DISCONNECTED'
