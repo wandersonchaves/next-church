@@ -16,8 +16,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 # Pula validação de envs durante o build do Docker (serão validadas no runtime)
 ENV SKIP_ENV_VALIDATION=1
-# Mocks para chaves públicas exigidas pelo build
-ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_mock
+# Mocks para chaves públicas exigidas pelo build (formato válido para o Clerk)
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_dmVyeS1jb29sLWdlbWluaS0xMC5jbGVyay5hY2NvdW50cy5kZXYk
 
 RUN npm run build
 

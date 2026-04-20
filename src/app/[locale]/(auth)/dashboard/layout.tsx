@@ -1,6 +1,8 @@
 import { setRequestLocale } from 'next-intl/server';
 import { GlobalHeader } from '@/components/Dashboard/GlobalHeader';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardLayout(props: {
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
