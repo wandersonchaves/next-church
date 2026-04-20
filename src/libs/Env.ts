@@ -39,4 +39,5 @@ export const Env = createEnv({
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NODE_ENV: process.env.NODE_ENV,
   },
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });
