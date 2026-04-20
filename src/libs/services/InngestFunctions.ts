@@ -292,8 +292,10 @@ export const onWhatsAppWebhook = inngest.createFunction(
 
       // Extração de IDs para vínculo
       const externalId = messageData.key?.id ?? messageData.Info?.ID;
-      const contextInfo = msg?.extendedTextMessage?.contextInfo || messageData.messageContextInfo;
+      const contextInfo = msg?.extendedTextMessage?.contextInfo || messageData.messageContextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
       const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
+
+      console.log(`[INNGEST] Identified External IDs: Current=${externalId}, Parent=${parentExternalId}`);
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {

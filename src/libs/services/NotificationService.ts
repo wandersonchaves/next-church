@@ -13,7 +13,6 @@ export const NotificationService = {
       if (!phone) return null;
       
       // Remove tudo que não for dígito. 
-      // Se for um JID (ex: 558694037788@s.whatsapp.net), removemos o domínio e o que não for número.
       const cleanPhone = String(phone).split('@')[0].replace(/\D/g, '');
 
       if (cleanPhone.length < 8) return null;
@@ -21,16 +20,24 @@ export const NotificationService = {
       const suffix = cleanPhone.slice(-8);
       const suffixWithNine = cleanPhone.slice(-9);
 
-      console.log(`[NOTIFICATION_SERVICE] Looking for member with phone suffix: ${suffix} or ${suffixWithNine}`);
+      console.log(`[NOTIFICATION_SERVICE] Querying member for phone: ${cleanPhone} (Suffix: ${suffix})`);
 
-      const member = await db.query.members.findFirst({
-        where: (members, { or, ilike }) => or(
-          ilike(members.phone, `%${suffix}`),
-          ilike(members.phone, `%${suffixWithNine}`)
-        ),
-      });
+      // Usando db.select() em vez de db.query() para maior estabilidade e performance
+      const results = await db
+        .select()
+        .from(members)
+        .where(
+          or(
+            ilike(members.phone, `%${suffix}`),
+            ilike(members.phone, `%${suffixWithNine}`)
+          )
+        )
+        .limit(1);
       
-      return member || null;
+      const member = results[0] || null;
+      console.log(`[NOTIFICATION_SERVICE] Member lookup result: ${member ? `${member.firstName} (ID: ${member.id})` : 'NOT FOUND'}`);
+      
+      return member;
     } catch (error) {
       console.error('[NOTIFICATION_SERVICE_PHONE_LOOKUP_ERROR]', error);
       return null;
@@ -56,9 +63,10 @@ export const NotificationService = {
 
       // Extrai o identificador antes do @ ou usa o sender inteiro se não houver @
       const senderId = String(data.sender).includes('@') ? String(data.sender).split('@')[0] : String(data.sender);
+      
+      console.log(`[NOTIFICATION_SERVICE] Processing incoming message from: ${senderId}`);
+      
       const member = await this.findMemberByPhone(data.sender);
-
-      console.log(`[NOTIFICATION_SERVICE] Processing message from ${senderId}. Member found: ${member ? `${member.firstName} (Org: ${member.organizationId})` : 'NO'}`);
 
       // Fallback logic aprimorado
       let orgId = member?.organizationId;

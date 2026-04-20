@@ -69,8 +69,22 @@ export async function POST(req: Request) {
               quotedMessage: body.data.Message.extendedTextMessage.contextInfo.quotedMessage,
             } : undefined,
           } : undefined,
-          imageMessage: body.data.Message.imageMessage ? { caption: body.data.Message.imageMessage.caption } : undefined,
-          videoMessage: body.data.Message.videoMessage ? { caption: body.data.Message.videoMessage.caption } : undefined,
+          imageMessage: body.data.Message.imageMessage ? { 
+            caption: body.data.Message.imageMessage.caption,
+            contextInfo: body.data.Message.imageMessage.contextInfo ? {
+              stanzaId: body.data.Message.imageMessage.contextInfo.stanzaId,
+              participant: body.data.Message.imageMessage.contextInfo.participant,
+              quotedMessage: body.data.Message.imageMessage.contextInfo.quotedMessage,
+            } : undefined
+          } : undefined,
+          videoMessage: body.data.Message.videoMessage ? { 
+            caption: body.data.Message.videoMessage.caption,
+            contextInfo: body.data.Message.videoMessage.contextInfo ? {
+              stanzaId: body.data.Message.videoMessage.contextInfo.stanzaId,
+              participant: body.data.Message.videoMessage.contextInfo.participant,
+              quotedMessage: body.data.Message.videoMessage.contextInfo.quotedMessage,
+            } : undefined
+          } : undefined,
         } : undefined,
         // Fallbacks
         key: body.data.key ? {
