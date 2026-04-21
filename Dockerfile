@@ -44,6 +44,7 @@ COPY --from=production-deps /app/node_modules ./node_modules
 # Copia as migrações e a config do drizzle
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
+COPY --from=builder /app/src/models ./src/models
 
 USER nextjs
 
