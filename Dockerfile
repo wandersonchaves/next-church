@@ -21,13 +21,7 @@ ENV CLERK_SECRET_KEY=$CLERK_SECRET_KEY
 
 RUN npm run build
 
-# 3. Prepara dependências de produção puras
-FROM node:22-alpine AS production-deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --legacy-peer-deps
-
-# 4. Runner Final
+# 3. Runner Final
 FROM node:22-alpine AS runner
 WORKDIR /app
 
@@ -42,8 +36,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copia as dependências de produção para garantir que o drizzle-kit esteja disponível
-COPY --from=production-deps /app/node_modules ./node_modules
+# Em vez de instalar deps de produção do zero, usamos as que o builder validou
+# O standalone já contém as deps necessárias em .next/standalone/node_modules
+# Mas para o drizzle-kit push e outros comandos, precisamos das originais
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copia as migrações e a config do drizzle
 COPY --from=builder /app/migrations ./migrations
