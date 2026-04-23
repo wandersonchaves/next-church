@@ -2,6 +2,7 @@
 import { db } from '@/libs/DB';
 import { members, notificationLogs, auditLogs } from '@/models/Schema';
 import { eq, sql, and, or, ilike } from 'drizzle-orm';
+import { Env } from '@/libs/Env';
 
 export const NotificationService = {
   /**
@@ -99,6 +100,8 @@ export const NotificationService = {
         type: 'WHATSAPP_INCOMING',
         status: 'RECEIVED',
         content: `${!member ? `[De: ${sender.split('@')[0]}] ` : ''}${content}`,
+        instanceId: data.instanceId,
+        instanceName: data.instanceName,
         externalId: extId,
         parentExternalId: parentId,
         sentAt: new Date(),
@@ -171,11 +174,23 @@ export const NotificationService = {
    * Fetches recent incoming messages for an organization.
    */
   async getIncomingMessages(organizationId: string, limit = 50) {
+    const conditions = [
+      eq(notificationLogs.organizationId, organizationId),
+      eq(notificationLogs.type, 'WHATSAPP_INCOMING')
+    ];
+
+    // FILTRO DE SEGURANÇA: Se houver uma instância configurada, filtramos apenas por ela
+    if (Env.EVOLUTION_INSTANCE) {
+      conditions.push(
+        or(
+          eq(notificationLogs.instanceId, Env.EVOLUTION_INSTANCE),
+          eq(notificationLogs.instanceName, Env.EVOLUTION_INSTANCE)
+        ) as any
+      );
+    }
+
     const results = await db.query.notificationLogs.findMany({
-      where: and(
-        eq(notificationLogs.organizationId, organizationId),
-        eq(notificationLogs.type, 'WHATSAPP_INCOMING')
-      ),
+      where: and(...conditions),
       orderBy: (notificationLogs, { desc }) => [desc(notificationLogs.sentAt)],
       limit,
       with: {
@@ -183,7 +198,7 @@ export const NotificationService = {
       },
     });
 
-    console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}`);
+    console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}${Env.EVOLUTION_INSTANCE ? ` (Filtered by: ${Env.EVOLUTION_INSTANCE})` : ''}`);
     return results;
   },
 };
