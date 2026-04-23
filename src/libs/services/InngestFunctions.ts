@@ -7,6 +7,7 @@ import { getWeeklySummary } from './AuditService';
 import { clerkClient } from '@clerk/nextjs/server';
 import { AppConfig } from '@/utils/AppConfig';
 import { NotificationService } from './NotificationService';
+import { Env } from '@/libs/Env';
 
 /**
  * Helper para buscar o nome da igreja no Clerk.
@@ -233,6 +234,15 @@ export const onWhatsAppWebhook = inngest.createFunction(
     // Extração robusta de instância (Pode estar no topo ou dentro de data)
     const instanceId = payload.instanceId || payload.data?.instanceId || 'unknown';
     const instanceName = payload.instanceName || payload.data?.instanceName || 'unknown';
+
+    // FILTRO DE SEGURANÇA: Só processa se a instância bater com a configurada
+    // Se a variável EVOLUTION_INSTANCE não estiver definida, processamos tudo (fallback)
+    if (Env.EVOLUTION_INSTANCE && 
+        instanceId !== Env.EVOLUTION_INSTANCE && 
+        instanceName !== Env.EVOLUTION_INSTANCE) {
+      console.log(`[INNGEST] Ignoring webhook from unauthorized instance: ${instanceId}/${instanceName}. Expected: ${Env.EVOLUTION_INSTANCE}`);
+      return { status: 'ignored_unauthorized_instance' };
+    }
 
     console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
 
