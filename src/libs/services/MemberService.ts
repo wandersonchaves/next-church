@@ -11,6 +11,7 @@ export type G12Node = {
   currentStep: string;
   level: number;
   generationSlot: number | null;
+  isLeader: boolean;
   children: G12Node[];
 };
 
@@ -20,10 +21,10 @@ export type G12Node = {
 export const getFilteredG12Hierarchy = async (orgId: string, search?: string, step?: string, rootId?: string) => {
   const query = sql`
     WITH RECURSIVE g12_tree AS (
-      -- 1. Identificamos as raízes (Se rootId for passado, ele é a raiz, senão quem não tem líder)
+      -- 1. Identificamos as raízes
       SELECT 
         id, first_name, last_name, leader_id, current_step, 
-        1 as level, generation_slot, created_at,
+        1 as level, generation_slot, is_leader, created_at,
         ARRAY[created_at::text] as sort_path
       FROM ${members}
       WHERE organization_id = ${orgId} 
@@ -34,7 +35,7 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
       -- 2. Buscamos os discípulos recursivamente
       SELECT 
         m.id, m.first_name, m.last_name, m.leader_id, m.current_step, 
-        t.level + 1, m.generation_slot, m.created_at,
+        t.level + 1, m.generation_slot, m.is_leader, m.created_at,
         t.sort_path || m.created_at::text
       FROM ${members} m
       INNER JOIN g12_tree t ON m.leader_id = t.id
@@ -57,6 +58,7 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
     currentStep: row.current_step,
     level: Number(row.level),
     generationSlot: row.generation_slot ? Number(row.generation_slot) : null,
+    isLeader: Boolean(row.is_leader),
   })) as Omit<G12Node, 'children'>[];
 };
 

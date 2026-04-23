@@ -50,11 +50,13 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
   const nextStep = currentIdx < stepsOrder.length - 1 ? stepsOrder[currentIdx + 1] : null;
 
   const getLabel = () => {
-    // Se não tem generationSlot, é PENDENTE independente do nível (evita que auto-cadastro sem líder vire Pastor)
+    // Se não tem generationSlot, é PENDENTE independente do nível
     if (!node.generationSlot) return { text: 'PENDENTE', color: 'border-slate-200 text-slate-400', icon: <User size={16} /> };
 
-    // Se é nível 1, tem slot e NÃO tem líder, é o Pastor Principal/Raiz
-    if (node.level === 1 && !node.leaderId) return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
+    // Se é nível 1, tem slot, NÃO tem líder e É líder explícito, é o Pastor
+    if (node.level === 1 && !node.leaderId && node.isLeader) {
+      return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
+    }
 
     // Caso contrário, é um Integrante normal de geração
     return { text: `G${node.generationSlot}`, color: 'border-indigo-100 text-indigo-600', icon: <Users size={16} /> };
