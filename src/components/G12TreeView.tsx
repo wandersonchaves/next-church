@@ -4,7 +4,7 @@ import * as React from 'react';
 import type { G12Node } from '@/libs/services/MemberService';
 import {
   ChevronDown, ChevronRight, Maximize2, Crown, Shield,
-  CheckCircle2, ArrowUpCircle, User, Search
+  CheckCircle2, ArrowUpCircle, User, Search, Users
 } from 'lucide-react';
 import { completeJourneyStepAction } from '@/app/[locale]/(auth)/dashboard/members/actions';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -51,13 +51,14 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
 
   const getLabel = () => {
     // Se não tem generationSlot, é PENDENTE independente do nível (evita que auto-cadastro sem líder vire Pastor)
-    if (!node.generationSlot) return { text: 'PENDENTE', color: 'border-slate-300 text-slate-400', icon: <User size={16} /> };
-    // Se é nível 1 e tem slot, é o Pastor Principal/Raiz
-    if (node.level === 1) return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
-    // Caso contrário, é um integrante com sua respectiva geração
-    return { text: `${node.generationSlot}ª GER`, color: 'border-blue-500 text-blue-600', icon: <Shield size={16} /> };
-  };
+    if (!node.generationSlot) return { text: 'PENDENTE', color: 'border-slate-200 text-slate-400', icon: <User size={16} /> };
 
+    // Se é nível 1, tem slot e NÃO tem líder, é o Pastor Principal/Raiz
+    if (node.level === 1 && !node.leaderId) return { text: 'PASTOR', color: 'border-amber-500 text-amber-600', icon: <Crown size={16} /> };
+
+    // Caso contrário, é um Integrante normal de geração
+    return { text: `G${node.generationSlot}`, color: 'border-indigo-100 text-indigo-600', icon: <Users size={16} /> };
+  };
   const label = getLabel();
 
   return (
