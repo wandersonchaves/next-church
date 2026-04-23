@@ -258,13 +258,11 @@ export const onWhatsAppWebhook = inngest.createFunction(
       }
 
       const senderJid = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
-      console.log(`[INNGEST] Message Data extracted, sender: ${senderJid}`);
-      
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
       let sender = senderJid;
       const chat = messageData.Info?.Chat || sender;
 
-      // Normalização de Sender: Se não tiver @ e terminar com .net, provavelmente é um JID malformado da v2
+      // Normalização de Sender
       if (sender && !sender.includes('@') && sender.endsWith('.net')) {
         sender = sender.replace('s.whatsapp.net', '@s.whatsapp.net');
       }
@@ -272,10 +270,8 @@ export const onWhatsAppWebhook = inngest.createFunction(
       const isGroup = messageData.Info?.IsGroup || sender?.includes('@g.us') || chat?.includes('@g.us');
       const isStatusOrNewsletter = chat?.includes('status') || chat?.includes('newsletter');
       
-      // Evolution Go (v2) uses capitalized "Message", while Baileys/v1 uses "message"
       const msg = messageData.message || messageData.Message;
       
-      // Filtros de Segurança: Ignoramos grupos, newsletters e mensagens próprias
       if (isGroup || isStatusOrNewsletter) {
         console.log(`[INNGEST] Ignoring group/newsletter/status message from: ${sender}`);
         return { status: 'ignored_group_or_newsletter' };
@@ -286,8 +282,6 @@ export const onWhatsAppWebhook = inngest.createFunction(
         return { status: 'ignored_from_me' };
       }
 
-      // Extração robusta de conteúdo (Conversation, Extended Text, etc)
-      // Evolution GO v2 coloca o texto em Message.conversation
       let content = msg?.conversation || 
                       msg?.extendedTextMessage?.text ||
                       msg?.imageMessage?.caption ||
@@ -295,19 +289,12 @@ export const onWhatsAppWebhook = inngest.createFunction(
                       messageData.content || 
                       messageData.text;
 
-      // Suporte para mensagens de protocolo ou informativas
-      if (!content && msg?.protocolMessage) {
-        content = "[Mensagem de Sistema/Protocolo]";
-      }
+      if (!content && msg?.protocolMessage) content = "[Mensagem de Sistema]";
+      if (!content) content = "[Mídia]";
 
-      if (!content) content = "[Mídia ou Formato não suportado]";
-
-      // Extração de IDs para vínculo
       const externalId = messageData.key?.id ?? messageData.Info?.ID;
-      const contextInfo = msg?.extendedTextMessage?.contextInfo || messageData.messageContextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
+      const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
       const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
-
-      console.log(`[INNGEST] Identified External IDs: Current=${externalId}, Parent=${parentExternalId}`);
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {

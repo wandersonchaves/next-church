@@ -183,8 +183,8 @@ export const NotificationService = {
     if (instanceFilter) {
       conditions.push(
         or(
-          eq(notificationLogs.instanceId, instanceFilter),
-          eq(notificationLogs.instanceName, instanceFilter)
+          ilike(notificationLogs.instanceId, `%${instanceFilter}%`),
+          ilike(notificationLogs.instanceName, `%${instanceFilter}%`)
         ) as any
       );
     }

@@ -101,36 +101,7 @@ export async function POST(req: Request) {
       } : undefined
     };
 
-    // 🚀 SALVAMENTO DIRETO (BACKGROUND)
-    // Se for uma mensagem, salvamos imediatamente no banco sem esperar o Inngest
-    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(incomingEvent)) {
-      // No sanitizedData.data, já temos a estrutura limpa
-      const messageData = sanitizedData.data;
-      const msg = messageData?.Message;
-
-      const content = msg?.conversation || 
-                      msg?.extendedTextMessage?.text ||
-                      msg?.imageMessage?.caption ||
-                      msg?.videoMessage?.caption;
-
-      const externalId = messageData?.Info?.ID || messageData?.key?.id;
-      const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
-      const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
-
-      if (content && sender) {
-        // Fire and forget: Não damos await para não travar a resposta do webhook
-        NotificationService.saveIncomingMessage({
-          sender: String(sender),
-          content: String(content),
-          instanceId: String(body.instanceId || ''),
-          instanceName: String(body.instanceName || ''),
-          externalId: String(externalId || ''),
-          parentExternalId: String(parentExternalId || ''),
-        }).catch(e => console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e));
-      }
-    }
-
-    // Mantemos o Inngest para outros processamentos assíncronos (logs de conexão, etc)
+    // Mantemos o Inngest para todos os processamentos assíncronos (Salvar mensagens, logs de conexão, etc)
     try {
       await inngest.send({
         name: 'whatsapp/webhook.received',
