@@ -41,6 +41,7 @@
     "@tailwindcss/postcss": "^4.2.1",
     "@tanstack/react-virtual": "^3.13.22",
     "babel-plugin-react-compiler": "^1.0.0-beta-20250210-26edba4",
+    "csv-parse": "^6.2.1",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
     "inngest": "^3.52.6",
