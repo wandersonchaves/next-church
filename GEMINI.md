@@ -24,7 +24,7 @@
 ### 2. Multi-tenancy & Onboarding
 - **Strict Isolation**: Every table MUST include an `organization_id`. All queries MUST be scoped using Clerk's `auth().orgId`.
 - **Invitation Workflow**: Team members are added via **Official Clerk Invitations**. The system handles localized redirects (`/[locale]/dashboard`) using absolute URLs to avoid 404 errors during onboarding.
-- **Automatic Seeding**: New organizations are automatically initialized with default ministries (e.g., "Louvor", "Filadelfia Kids") via `SeedService` upon first dashboard access.
+- **Automatic Seeding**: New organizations are automatically initialized with default ministries (e.g., "Louvor", "TelePaz Filadélfia Kids") via `SeedService` upon first dashboard access.
 
 ### 3. Resilience & Side-effects
 - **Transaction Safety**: DB transactions (`db.transaction`) MUST contain only pure database operations.
@@ -49,7 +49,7 @@
 
 ### 4. Communication Engine
 - **Weekly Report**: Automated Inngest Cron job that generates a weekly activity summary and sends it via WhatsApp to the Senior Pastor (`leaderId IS NULL`).
-- **Dynamic Branding**: WhatsApp messages dynamically use the Organization Name from Clerk, falling back to "Filadelfia" if not set.
+- **Dynamic Branding**: WhatsApp messages dynamically use the Organization Name from Clerk, falling back to "TelePaz Filadélfia" if not set.
 
 ---
 

@@ -24,7 +24,7 @@ export const SeedService = {
     const defaultMinistries = [
       { name: 'Louvor & Adoração', description: 'Equipe responsável pela música e ambiente de adoração.' },
       { name: 'Mídia & Produção', description: 'Som, projeção, redes sociais e transmissão.' },
-      { name: 'Filadelfia Kids', description: 'Ensino bíblico e cuidado para a próxima geração.' },
+      { name: 'TelePaz Filadélfia Kids', description: 'Ensino bíblico e cuidado para a próxima geração.' },
       { name: 'Consolidação', description: 'Acolhimento e acompanhamento de novos decididos.' },
       { name: 'Intercessão', description: 'Cobertura espiritual e reuniões de oração.' },
       { name: 'Apoio & Logística', description: 'Organização, limpeza e recepção.' },

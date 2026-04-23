@@ -15,9 +15,9 @@ async function getChurchName(orgId: string) {
   try {
     const client = await clerkClient();
     const org = await client.organizations.getOrganization({ organizationId: orgId });
-    return org.name || 'Filadelfia';
+    return org.name || 'TelePaz Filadélfia';
   } catch {
-    return 'Filadelfia';
+    return 'TelePaz Filadélfia';
   }
 }
 
@@ -152,9 +152,8 @@ export const dailyBirthdayCheck = inngest.createFunction(
 
     for (const member of membersList) {
       if (member.phone) {
-        const churchName = await step.run(`get-church-${member.id}`, async () => await getChurchName(member.organizationId));
         await step.run(`send-birthday-msg-${member.id}`, async () => {
-          const msg = `Feliz aniversário, ${member.firstName}! 🎉 Toda a família *${churchName}* celebra a sua vida hoje. Que Deus te abençoe grandemente! ✨`;
+          const msg = `Que dia especial! Feliz aniversário ${member.firstName} 😃 Nós do TelePaz Filadélfia ✨ desejamos um novo ano abençoado. Celebramos sua vida, pois você é importante para Deus e para nós. Que o Senhor abençoe você e toda a sua família. 🙌🏼✨`;
           await WhatsAppService.sendMessage(member.phone!, msg, member.organizationId);
         });
 
