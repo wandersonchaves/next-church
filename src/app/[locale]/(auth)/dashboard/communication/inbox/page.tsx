@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { db } from '@/libs/DB';
 import { notificationLogs } from '@/models/Schema';
 import { inArray } from 'drizzle-orm';
+import { Env } from '@/libs/Env';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,7 +18,7 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
 
   if (!orgId) return null;
 
-  const messages = await NotificationService.getIncomingMessages(orgId);
+  const messages = await NotificationService.getIncomingMessages(orgId, Env.EVOLUTION_INSTANCE);
   
   // Busca mensagens originais (quotes) para dar contexto
   const parentIds = messages

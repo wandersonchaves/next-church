@@ -173,18 +173,18 @@ export const NotificationService = {
   /**
    * Fetches recent incoming messages for an organization.
    */
-  async getIncomingMessages(organizationId: string, limit = 50) {
+  async getIncomingMessages(organizationId: string, instanceFilter?: string, limit = 50) {
     const conditions = [
       eq(notificationLogs.organizationId, organizationId),
       eq(notificationLogs.type, 'WHATSAPP_INCOMING')
     ];
 
-    // FILTRO DE SEGURANÇA: Se houver uma instância configurada, filtramos apenas por ela
-    if (Env.EVOLUTION_INSTANCE) {
+    // Filtro dinâmico por instância
+    if (instanceFilter) {
       conditions.push(
         or(
-          eq(notificationLogs.instanceId, Env.EVOLUTION_INSTANCE),
-          eq(notificationLogs.instanceName, Env.EVOLUTION_INSTANCE)
+          eq(notificationLogs.instanceId, instanceFilter),
+          eq(notificationLogs.instanceName, instanceFilter)
         ) as any
       );
     }
@@ -198,7 +198,7 @@ export const NotificationService = {
       },
     });
 
-    console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}${Env.EVOLUTION_INSTANCE ? ` (Filtered by: ${Env.EVOLUTION_INSTANCE})` : ''}`);
+    console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}${instanceFilter ? ` (Filtered by: ${instanceFilter})` : ''}`);
     return results;
   },
 };
