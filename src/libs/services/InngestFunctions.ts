@@ -37,7 +37,11 @@ export const onMemberCreated = inngest.createFunction(
       const [result] = await db
         .select()
         .from(members)
-        .where(and(eq(members.id, memberId), eq(members.organizationId, organizationId)))
+        .where(and(
+          eq(members.id, memberId), 
+          eq(members.organizationId, organizationId),
+          isNull(members.deletedAt) // Valida se não foi excluído
+        ))
         .limit(1);
       return result;
     });
@@ -68,7 +72,11 @@ export const onStepCompleted = inngest.createFunction(
       const [result] = await db
         .select()
         .from(members)
-        .where(and(eq(members.id, memberId), eq(members.organizationId, organizationId)))
+        .where(and(
+          eq(members.id, memberId), 
+          eq(members.organizationId, organizationId),
+          isNull(members.deletedAt) // Valida se não foi excluído
+        ))
         .limit(1);
       return result;
     });
@@ -147,7 +155,10 @@ export const dailyBirthdayCheck = inngest.createFunction(
   async ({ step }) => {
     const membersList = await step.run("fetch-birthday-members", async () => {
       return await db.select().from(members).where(
-        sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`
+        and(
+          sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`,
+          isNull(members.deletedAt) // 🛡️ SEGURANÇA: Não parabenizar membros excluídos
+        )
       );
     });
 
@@ -177,7 +188,10 @@ export const sendBroadcast = inngest.createFunction(
 
     // 1. Busca os membros com base nos filtros
     const recipients = await step.run('fetch-recipients', async () => {
-      const conditions = [eq(members.organizationId, organizationId)];
+      const conditions = [
+        eq(members.organizationId, organizationId),
+        isNull(members.deletedAt) // 🛡️ SEGURANÇA: Ignora membros excluídos
+      ];
       
       if (filters.currentStep) {
         conditions.push(eq(members.currentStep, filters.currentStep));
