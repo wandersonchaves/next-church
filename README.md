@@ -32,4 +32,4 @@
 ---
 
 Developed with passion by [Wanderson Chaves](https://github.com/wandersonchaves).  
-*Philadelphia Hub standard of excellence, powered by NextChurch technology.*
+*Next Church standard of excellence, powered by NextChurch technology.*

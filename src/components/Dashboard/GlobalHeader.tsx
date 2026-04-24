@@ -39,7 +39,7 @@ export const GlobalHeader = () => {
         <div className="flex items-center gap-8">
           <Link href="/dashboard" className="flex items-center gap-3 group">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-200 transition-transform group-hover:scale-105">
-              <span className="text-lg font-black italic">P</span>
+              <span className="text-lg font-black italic">F</span>
             </div>
             <div className="hidden lg:block">
               <h1 className="text-sm font-black tracking-tighter text-slate-900 uppercase italic leading-none">{AppConfig.name}</h1>
