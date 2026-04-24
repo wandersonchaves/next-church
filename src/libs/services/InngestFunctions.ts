@@ -200,7 +200,19 @@ export const sendBroadcast = inngest.createFunction(
         const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
 
         await step.run(`send-${member.id}`, async () => {
-          await WhatsAppService.sendMessage(member.phone!, personalizedMessage, organizationId);
+          const result: any = await WhatsAppService.sendMessage(member.phone!, personalizedMessage, organizationId);
+          
+          // Captura o ID da mensagem de forma segura (Evolution GO v2 ou v1)
+          const msgId = result?.key?.id || result?.data?.key?.id || result?.data?.id;
+
+          // Salva o log da mensagem enviada para permitir o vínculo de respostas depois
+          await NotificationService.saveOutgoingMessage({
+            phone: member.phone!,
+            content: personalizedMessage,
+            organizationId: organizationId,
+            status: msgId ? 'SENT' : 'FAILED',
+            externalId: msgId,
+          });
         });
 
         // A cada 30 mensagens, faz uma pausa maior de 2 minutos (Batch cooldown)

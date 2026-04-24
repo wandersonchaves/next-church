@@ -223,15 +223,14 @@ export const NotificationService = {
 
   /**
    * Busca respostas interativas vinculadas a perguntas enviadas.
-   * Útil para pesquisas de batismo, ministério, etc.
+   * Inteligência: Se não houver vínculo direto (reply), busca a última mensagem enviada.
    */
   async getSurveyResponses(organizationId: string, limit = 50) {
-    // 1. Busca mensagens recebidas que são respostas (possuem parentExternalId)
+    // 1. Busca mensagens recebidas (Inngest ou Direct)
     const incoming = await db.query.notificationLogs.findMany({
       where: and(
         eq(notificationLogs.organizationId, organizationId),
-        eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
-        sql`${notificationLogs.parentExternalId} IS NOT NULL`
+        eq(notificationLogs.type, 'WHATSAPP_INCOMING')
       ),
       orderBy: (n, { desc }) => [desc(n.sentAt)],
       limit,
@@ -240,22 +239,43 @@ export const NotificationService = {
       },
     });
 
-    // 2. Para cada resposta, busca a pergunta original
+    // 2. Correlaciona com a pergunta (contexto)
     const responses = await Promise.all(incoming.map(async (msg) => {
-      const question = await db.query.notificationLogs.findFirst({
-        where: eq(notificationLogs.externalId, msg.parentExternalId!),
-      });
+      let question: any = null;
+
+      if (msg.parentExternalId) {
+        // Busca por ID direto (Reply oficial)
+        question = await db.query.notificationLogs.findFirst({
+          where: eq(notificationLogs.externalId, msg.parentExternalId),
+        });
+      }
+
+      if (!question && msg.memberId) {
+        // Fallback: Busca a última mensagem enviada para esse membro ANTES da resposta
+        question = await db.query.notificationLogs.findFirst({
+          where: and(
+            eq(notificationLogs.memberId, msg.memberId),
+            eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+            sql`${notificationLogs.sentAt} < ${msg.sentAt}`
+          ),
+          orderBy: (n, { desc }) => [desc(n.sentAt)],
+        });
+      }
+
+      // Só retornamos se houver uma "pergunta" associada para triagem
+      if (!question) return null;
 
       return {
         id: msg.id,
         member: msg.member,
-        question: question?.content || 'Pergunta Original não encontrada',
+        question: question.content,
         answer: msg.content,
         sentAt: msg.sentAt,
         externalId: msg.externalId,
       };
     }));
 
-    return responses;
+    // Filtra nulos e limita
+    return responses.filter((r): r is NonNullable<typeof r> => r !== null).slice(0, limit);
   },
 };
