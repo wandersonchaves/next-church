@@ -84,9 +84,12 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
         tabIndex={0}
       >
         <div className="flex items-center gap-2">
-          <p className={`text-sm font-bold truncate leading-none ${!node.generationSlot ? 'text-slate-400' : 'text-slate-800'}`}>
+          <p className={`text-sm font-bold truncate leading-none ${node.isMatch ? 'text-indigo-600' : !node.generationSlot ? 'text-slate-400' : 'text-slate-800'}`}>
             {node.firstName} {node.lastName}
           </p>
+          {node.isMatch && (
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" title="Resultado da busca" />
+          )}
           <span className={`text-[8px] font-black uppercase tracking-tighter border px-1 rounded ${label.color}`}>
             {label.text}
           </span>
@@ -150,6 +153,39 @@ export const G12TreeView = ({ data }: { data: G12Node[] }) => {
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => getInitialExpandedIds(data || [], 2));
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
   const parentRef = React.useRef<HTMLDivElement>(null);
+
+  // Expande automaticamente os ramos que têm correspondência (isMatch)
+  React.useEffect(() => {
+    const matchedIds = new Set<string>();
+    const collectMatches = (nodes: G12Node[]) => {
+      nodes.forEach(node => {
+        if (node.isMatch || node.children?.some(c => c.isMatch)) {
+          matchedIds.add(node.id);
+        }
+        if (node.children) collectMatches(node.children);
+      });
+    };
+    
+    // Se houver algum isMatch na lista completa, forçamos a expansão dos caminhos
+    const hasAnyMatch = (nodes: G12Node[]): boolean => {
+      return nodes.some(n => n.isMatch || (n.children && hasAnyMatch(n.children)));
+    };
+
+    if (hasAnyMatch(data)) {
+      const idsToExpand = new Set<string>();
+      const findPathToMatch = (nodes: G12Node[]) => {
+        nodes.forEach(node => {
+          const childHasMatch = node.children && hasAnyMatch(node.children);
+          if (childHasMatch) {
+            idsToExpand.add(node.id);
+            findPathToMatch(node.children!);
+          }
+        });
+      };
+      findPathToMatch(data);
+      setExpandedIds(prev => new Set([...Array.from(prev), ...Array.from(idsToExpand)]));
+    }
+  }, [data]);
 
   const flattenedData = React.useMemo(() => {
     const flattened: { node: G12Node; depth: number }[] = [];

@@ -12,11 +12,13 @@ export type G12Node = {
   level: number;
   generationSlot: number | null;
   isLeader: boolean;
+  isMatch?: boolean;
   children: G12Node[];
 };
 
 /**
- * Busca a hierarquia G12 filtrada (global ou sub-rede).
+ * Busca a hierarquia G12 filtrada.
+ * A lógica foi aprimorada para manter a estrutura da árvore mesmo com filtros.
  */
 export const getFilteredG12Hierarchy = async (orgId: string, search?: string, step?: string, rootId?: string) => {
   const query = sql`
@@ -43,16 +45,18 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
       WHERE m.organization_id = ${orgId}
       AND m.deleted_at IS NULL
     )
-    SELECT * FROM g12_tree 
-    WHERE 1=1
-    ${search ? sql` AND (first_name || ' ' || last_name) ILIKE ${`%${search}%`}` : sql``}
-    ${step ? sql` AND current_step = ${step}` : sql``}
+    SELECT *,
+      CASE 
+        WHEN ${search ? sql`(first_name || ' ' || last_name) ILIKE ${`%${search}%`}` : sql`FALSE`} THEN TRUE
+        ELSE FALSE
+      END as is_match
+    FROM g12_tree 
     ORDER BY sort_path ASC;
   `;
 
   const result = await db.execute(query);
 
-  return (result.rows as any[]).map(row => ({
+  const allNodes = (result.rows as any[]).map(row => ({
     id: row.id,
     firstName: row.first_name,
     lastName: row.last_name,
@@ -61,7 +65,33 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
     level: Number(row.level),
     generationSlot: row.generation_slot ? Number(row.generation_slot) : null,
     isLeader: Boolean(row.is_leader),
-  })) as Omit<G12Node, 'children'>[];
+    isMatch: Boolean(row.is_match),
+  }));
+
+  // Se houver busca, precisamos garantir que mostramos apenas ramos que contenham o resultado
+  if (search || step) {
+    const matchedIds = new Set(allNodes.filter(n => n.isMatch || (step && n.currentStep === step)).map(n => n.id));
+    
+    // Se não achou nada, retorna vazio
+    if (matchedIds.size === 0) return [];
+
+    // Sobe a árvore marcando quem deve ser exibido (ancestrais dos matches)
+    const visibleIds = new Set<string>(matchedIds);
+    let added = true;
+    while (added) {
+      added = false;
+      allNodes.forEach(node => {
+        if (node.leaderId && visibleIds.has(node.id) && !visibleIds.has(node.leaderId)) {
+          visibleIds.add(node.leaderId);
+          added = true;
+        }
+      });
+    }
+
+    return allNodes.filter(n => visibleIds.has(n.id)) as Omit<G12Node, 'children'>[];
+  }
+
+  return allNodes as Omit<G12Node, 'children'>[];
 };
 
 export const getG12Hierarchy = async (orgId: string) => getFilteredG12Hierarchy(orgId);

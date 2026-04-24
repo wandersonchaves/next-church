@@ -1,9 +1,10 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { db } from '@/libs/DB';
 import { getMembersByGenerationSlot } from '@/libs/services/MemberService';
-import { Shield, ArrowLeft, User, MessageCircle } from 'lucide-react';
+import { Shield, ArrowLeft, User, MessageCircle, Eye } from 'lucide-react';
 import { Link } from '@/libs/I18nNavigation';
 import { setRequestLocale } from 'next-intl/server';
+import { DeleteMemberButton } from '@/components/DeleteMemberButton';
 
 export default async function GenerationPage(props: { params: Promise<{ slot: string, locale: string }> }) {
   const { slot, locale } = await props.params;
@@ -51,13 +52,24 @@ export default async function GenerationPage(props: { params: Promise<{ slot: st
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1.5">{m.currentStep.replace(/_/g, ' ')}</p>
                 </div>
               </div>
-              <a
-                href={`https://wa.me/${m.phone}`}
-                target="_blank"
-                className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
-              >
-                <MessageCircle size={20} />
-              </a>
+              <div className="flex items-center gap-1">
+                <a
+                  href={`https://wa.me/${m.phone}`}
+                  target="_blank"
+                  className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                  title="WhatsApp"
+                >
+                  <MessageCircle size={18} />
+                </a>
+                <Link
+                  href={`/dashboard/members/${m.id}/edit`}
+                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="Ver Detalhes / Editar"
+                >
+                  <Eye size={18} />
+                </Link>
+                <DeleteMemberButton memberId={m.id} memberName={`${m.firstName} ${m.lastName}`} />
+              </div>
             </div>
 
             <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
