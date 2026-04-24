@@ -220,4 +220,42 @@ export const NotificationService = {
     console.log(`[NOTIFICATION_SERVICE] Found ${results.length} incoming messages for Org: ${organizationId}${instanceFilter ? ` (Filtered by: ${instanceFilter})` : ''}`);
     return results;
   },
+
+  /**
+   * Busca respostas interativas vinculadas a perguntas enviadas.
+   * Útil para pesquisas de batismo, ministério, etc.
+   */
+  async getSurveyResponses(organizationId: string, limit = 50) {
+    // 1. Busca mensagens recebidas que são respostas (possuem parentExternalId)
+    const incoming = await db.query.notificationLogs.findMany({
+      where: and(
+        eq(notificationLogs.organizationId, organizationId),
+        eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
+        sql`${notificationLogs.parentExternalId} IS NOT NULL`
+      ),
+      orderBy: (n, { desc }) => [desc(n.sentAt)],
+      limit,
+      with: {
+        member: true,
+      },
+    });
+
+    // 2. Para cada resposta, busca a pergunta original
+    const responses = await Promise.all(incoming.map(async (msg) => {
+      const question = await db.query.notificationLogs.findFirst({
+        where: eq(notificationLogs.externalId, msg.parentExternalId!),
+      });
+
+      return {
+        id: msg.id,
+        member: msg.member,
+        question: question?.content || 'Pergunta Original não encontrada',
+        answer: msg.content,
+        sentAt: msg.sentAt,
+        externalId: msg.externalId,
+      };
+    }));
+
+    return responses;
+  },
 };

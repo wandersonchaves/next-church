@@ -201,3 +201,29 @@ export async function completeJourneyStepAction(data: any) {
     return { error: 'Erro ao processar jornada.' };
   }
 }
+
+/**
+ * Atualiza o status de batismo de um membro.
+ */
+export async function markAsBaptizedAction(memberId: string, isBaptized: boolean) {
+  const { orgId } = await auth();
+  if (!orgId) return { error: 'Unauthorized' };
+
+  try {
+    await db.update(members)
+      .set({ isBaptized, updatedAt: new Date() })
+      .where(and(eq(members.id, memberId), eq(members.organizationId, orgId)));
+
+    revalidatePath('/[locale]/dashboard/communication/responses');
+    return { success: true };
+  } catch (e) {
+    return { error: 'Falha ao atualizar batismo.' };
+  }
+}
+
+/**
+ * Atalho para marcar membro como inativo (Soft Delete).
+ */
+export async function markAsInactiveAction(memberId: string) {
+  return await deleteMemberAction(memberId);
+}

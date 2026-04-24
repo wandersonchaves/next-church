@@ -1,6 +1,6 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
 import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction } from './actions';
@@ -99,6 +99,14 @@ export default function CommunicationPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link 
+              href={`/${locale}/dashboard/communication/responses`}
+              className="flex items-center gap-2 rounded-2xl bg-indigo-100 px-6 py-3 text-[10px] font-black tracking-widest text-indigo-600 uppercase transition-all hover:bg-indigo-200"
+            >
+              <MessageCircle size={16} />
+              Interações
+            </Link>
+
             <Link 
               href={`/${locale}/dashboard/communication/inbox`}
               className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
