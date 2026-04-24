@@ -65,6 +65,7 @@ export const members = pgTable('members', {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
+  deletedAt: timestamp('deleted_at', { mode: 'date' }),
 }, (table) => [
   index('member_org_idx').on(table.organizationId),
   index('member_leader_idx').on(table.leaderId),

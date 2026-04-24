@@ -1,7 +1,7 @@
 
 import { db } from '@/libs/DB';
 import { members, notificationLogs, auditLogs } from '@/models/Schema';
-import { eq, sql, and, or, ilike } from 'drizzle-orm';
+import { eq, sql, and, or, ilike, isNull } from 'drizzle-orm';
 import { Env } from '@/libs/Env';
 
 export const NotificationService = {
@@ -29,7 +29,10 @@ export const NotificationService = {
       const results = await db
         .select()
         .from(members)
-        .where(ilike(members.phone, `%${suffix8}`))
+        .where(and(
+          ilike(members.phone, `%${suffix8}`),
+          isNull(members.deletedAt) // Ignora membros excluídos
+        ))
         .limit(1);
       
       const member = results[0] || null;

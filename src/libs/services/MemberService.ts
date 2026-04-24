@@ -1,4 +1,4 @@
-import { sql, ilike, and, eq, count, or } from 'drizzle-orm';
+import { sql, ilike, and, eq, count, or, isNull } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { members } from '@/models/Schema';
 
@@ -28,6 +28,7 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
         ARRAY[created_at::text] as sort_path
       FROM ${members}
       WHERE organization_id = ${orgId} 
+      AND deleted_at IS NULL
       AND ${rootId ? sql`id = ${rootId}` : sql`leader_id IS NULL`}
 
       UNION ALL
@@ -40,6 +41,7 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
       FROM ${members} m
       INNER JOIN g12_tree t ON m.leader_id = t.id
       WHERE m.organization_id = ${orgId}
+      AND m.deleted_at IS NULL
     )
     SELECT * FROM g12_tree 
     WHERE 1=1
@@ -68,7 +70,11 @@ export const getStatsByGeneration = async (orgId: string) => {
   return await db
     .select({ slot: members.generationSlot, count: count() })
     .from(members)
-    .where(and(eq(members.organizationId, orgId), sql`${members.generationSlot} IS NOT NULL`))
+    .where(and(
+      eq(members.organizationId, orgId), 
+      sql`${members.generationSlot} IS NOT NULL`,
+      isNull(members.deletedAt)
+    ))
     .groupBy(members.generationSlot)
     .orderBy(members.generationSlot);
 };
@@ -77,7 +83,7 @@ export const getG12Stats = async (orgId: string) => {
   return await db
     .select({ current_step: members.currentStep, count: count() })
     .from(members)
-    .where(eq(members.organizationId, orgId))
+    .where(and(eq(members.organizationId, orgId), isNull(members.deletedAt)))
     .groupBy(members.currentStep);
 };
 
@@ -93,6 +99,20 @@ export const getMembersByGenerationSlot = async (orgId: string, slot: number) =>
     })
     .from(members)
     .leftJoin(sql`${members} as leader`, eq(members.leaderId, sql`leader.id`))
-    .where(and(eq(members.organizationId, orgId), eq(members.generationSlot, slot)))
+    .where(and(
+      eq(members.organizationId, orgId), 
+      eq(members.generationSlot, slot),
+      isNull(members.deletedAt)
+    ))
     .orderBy(members.firstName);
+};
+
+/**
+ * Realiza a exclusão lógica de um membro.
+ */
+export const softDeleteMember = async (id: string, orgId: string) => {
+  return await db
+    .update(members)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(members.id, id), eq(members.organizationId, orgId)));
 };
