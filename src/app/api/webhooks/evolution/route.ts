@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { inngest } from '@/libs/Inngest';
 import { NotificationService } from '@/libs/services/NotificationService';
+import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,64 +45,46 @@ export async function POST(req: Request) {
 
     console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent} from ${sender}`);
 
-    // Smart Sanitization: Remove heavy fields but keep structure for Inbox and Linking
+    // Smart Sanitization
     const sanitizedData = {
       event: body.event,
       instanceId: body.instanceId,
       instanceName: body.instanceName,
-      data: body.data ? {
-        event: body.data.event,
-        instanceId: body.data.instanceId,
-        instanceName: body.data.instanceName,
-        // Informações da Mensagem
-        Info: body.data.Info ? {
-          ID: body.data.Info.ID,
-          Sender: body.data.Info.Sender,
-          Chat: body.data.Info.Chat,
-          IsGroup: body.data.Info.IsGroup,
-          IsFromMe: body.data.Info.IsFromMe,
-          Timestamp: body.data.Info.Timestamp,
-          Type: body.data.Info.Type,
-          PushName: body.data.Info.PushName,
-        } : undefined,
-        // Estrutura de Mensagem
-        Message: body.data.Message ? {
-          conversation: body.data.Message.conversation,
-          extendedTextMessage: body.data.Message.extendedTextMessage ? {
-            text: body.data.Message.extendedTextMessage.text,
-            contextInfo: body.data.Message.extendedTextMessage.contextInfo ? {
-              stanzaId: body.data.Message.extendedTextMessage.contextInfo.stanzaId,
-              participant: body.data.Message.extendedTextMessage.contextInfo.participant,
-              quotedMessage: body.data.Message.extendedTextMessage.contextInfo.quotedMessage,
-            } : undefined,
-          } : undefined,
-          imageMessage: body.data.Message.imageMessage ? { 
-            caption: body.data.Message.imageMessage.caption,
-            contextInfo: body.data.Message.imageMessage.contextInfo ? {
-              stanzaId: body.data.Message.imageMessage.contextInfo.stanzaId,
-              participant: body.data.Message.imageMessage.contextInfo.participant,
-              quotedMessage: body.data.Message.imageMessage.contextInfo.quotedMessage,
-            } : undefined
-          } : undefined,
-          videoMessage: body.data.Message.videoMessage ? { 
-            caption: body.data.Message.videoMessage.caption,
-            contextInfo: body.data.Message.videoMessage.contextInfo ? {
-              stanzaId: body.data.Message.videoMessage.contextInfo.stanzaId,
-              participant: body.data.Message.videoMessage.contextInfo.participant,
-              quotedMessage: body.data.Message.videoMessage.contextInfo.quotedMessage,
-            } : undefined
-          } : undefined,
-        } : undefined,
-        // Fallbacks
-        key: body.data.key ? {
-          remoteJid: body.data.key.remoteJid,
-          fromMe: body.data.key.fromMe,
-          id: body.data.key.id,
-        } : undefined,
-      } : undefined
+      data: body.data
     };
 
-    // Mantemos o Inngest para todos os processamentos assíncronos (Salvar mensagens, logs de conexão, etc)
+    // 🚀 SALVAMENTO DIRETO (ALTA PERFORMANCE)
+    // Se for uma mensagem, salvamos imediatamente para garantir que o Inbox atualize rápido
+    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(incomingEvent)) {
+      const messageData = body.data;
+      const msg = messageData?.message || messageData?.Message;
+
+      const content = msg?.conversation || 
+                      msg?.extendedTextMessage?.text ||
+                      msg?.imageMessage?.caption ||
+                      msg?.videoMessage?.caption ||
+                      messageData?.content;
+
+      const externalId = messageData?.key?.id || messageData?.Info?.ID;
+      const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
+      const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
+
+      if (content && sender) {
+        await NotificationService.saveIncomingMessage({
+          sender: String(sender),
+          content: String(content),
+          instanceId: String(body.instanceId || ''),
+          instanceName: String(body.instanceName || ''),
+          externalId: String(externalId || ''),
+          parentExternalId: String(parentExternalId || ''),
+        }).catch(e => console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e));
+
+        // Limpa o cache da página de Inbox em todos os idiomas
+        revalidatePath('/[locale]/dashboard/communication/inbox', 'page');
+      }
+    }
+
+    // Mantemos o Inngest para outros processamentos assíncronos (logs de conexão, etc)
     try {
       await inngest.send({
         name: 'whatsapp/webhook.received',

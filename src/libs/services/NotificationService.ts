@@ -184,7 +184,8 @@ export const NotificationService = {
       conditions.push(
         or(
           ilike(notificationLogs.instanceId, `%${instanceFilter}%`),
-          ilike(notificationLogs.instanceName, `%${instanceFilter}%`)
+          ilike(notificationLogs.instanceName, `%${instanceFilter}%`),
+          sql`${notificationLogs.instanceId} IS NULL` // Mantém mensagens sem instância para evitar perda de histórico
         ) as any
       );
     }
