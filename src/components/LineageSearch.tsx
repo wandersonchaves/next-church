@@ -13,10 +13,14 @@ export function LineageSearch() {
   // Estado local para o valor do input para uma UI responsiva
   const [value, setValue] = useState(searchParams.get('search') || '');
 
-  // Debounce manual simples para evitar muitas requisições
+  // Debounce manual para evitar muitas requisições
   useEffect(() => {
+    // Se o valor for igual ao que já está na URL, não faz nada
+    const currentSearch = searchParams.get('search') || '';
+    if (value === currentSearch) return;
+
     const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams);
+      const params = new URLSearchParams(searchParams.toString());
       if (value) {
         params.set('search', value);
       } else {
@@ -26,7 +30,7 @@ export function LineageSearch() {
       startTransition(() => {
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
       });
-    }, 400);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [value, pathname, router, searchParams]);
