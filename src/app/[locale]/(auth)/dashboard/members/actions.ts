@@ -1,16 +1,17 @@
 'use server';
 
 import { auth } from '@clerk/nextjs/server';
-import { and, count, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/libs/DB';
 import { inngest } from '@/libs/Inngest';
 import { journeyHistory, memberJourneys, members } from '@/models/Schema';
 import { MemberSchema, StepCompletionSchema } from '@/validations/MemberValidation';
 import { logActivity } from '@/libs/services/AuditService';
+import { softDeleteMember } from '@/libs/services/MemberService';
 
 /**
- * Adiciona um novo integrante com resiliência a falhas de side-effects (Inngest/Audit).
+ * Adiciona um novo integrante com resiliência a falhas de side-effects.
  */
 export async function createMemberAction(data: any) {
   const { orgId } = await auth();
@@ -22,7 +23,6 @@ export async function createMemberAction(data: any) {
   let createdMember = null;
 
   try {
-    // 1. Transação Pura de Banco de Dados
     createdMember = await db.transaction(async (tx) => {
       let lineage = '';
       const { leaderId } = validated.data;
@@ -54,26 +54,20 @@ export async function createMemberAction(data: any) {
       return newMember;
     });
 
-    // 2. Side-effects FORA da transação (Se falhar, o membro já está salvo)
     if (createdMember) {
-      try {
-        await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName}`);
-        await inngest.send({
-          name: 'member/created',
-          data: { memberId: createdMember.id, organizationId: orgId }
-        });
-      } catch (sideEffectErr) {
-        const errorMessage = sideEffectErr instanceof Error ? sideEffectErr.message : 'Unknown error';
-        console.warn('[SIDE_EFFECT_WARN] Registro salvo, mas auditoria/inngest falhou:', errorMessage);
-      }
+      await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName}`).catch(() => {});
+      await inngest.send({
+        name: 'member/created',
+        data: { memberId: createdMember.id, organizationId: orgId }
+      }).catch(() => {});
     }
 
     revalidatePath('/[locale]/dashboard', 'layout');
     return { success: true, data: createdMember };
 
   } catch (e) {
-    console.error('[DATABASE_ERROR]', e);
-    return { error: 'Erro ao salvar no banco de dados. Tente novamente.' };
+    console.error('[CREATE_MEMBER_ERROR]', e);
+    return { error: 'Erro ao salvar integrante.' };
   }
 }
 
@@ -119,31 +113,42 @@ export async function updateMemberAction(memberId: string, data: any) {
         .where(and(eq(members.id, memberId), eq(members.organizationId, orgId)));
     });
 
-    // Auditoria fora da transação
     await logActivity('UPDATE', 'MEMBER', `${validated.data.firstName} ${validated.data.lastName}`).catch(() => { });
 
     revalidatePath('/[locale]/dashboard', 'layout');
     return { success: true };
   } catch (e) {
-    console.error('[UPDATE_ERROR]', e);
-    return { error: 'Falha ao atualizar registro.' };
+    console.error('[UPDATE_MEMBER_ERROR]', e);
+    return { error: 'Falha ao atualizar integrante.' };
   }
 }
 
+/**
+ * Realiza a exclusão lógica (soft delete) de um membro.
+ */
 export async function deleteMemberAction(memberId: string) {
   const { orgId } = await auth();
   if (!orgId) return { error: 'Unauthorized' };
+
   try {
-    const [member] = await db.select().from(members).where(eq(members.id, memberId)).limit(1);
-    await db.delete(members).where(and(eq(members.id, memberId), eq(members.organizationId, orgId)));
-    if (member) await logActivity('DELETE', 'MEMBER', `${member.firstName} ${member.lastName}`).catch(() => { });
+    const [member] = await db.select().from(members).where(and(eq(members.id, memberId), eq(members.organizationId, orgId))).limit(1);
+    if (!member) return { error: 'Membro não encontrado.' };
+
+    await softDeleteMember(memberId, orgId);
+
+    await logActivity('DELETE', 'MEMBER', `${member.firstName} ${member.lastName}`).catch(() => { });
+
     revalidatePath('/[locale]/dashboard', 'layout');
     return { success: true };
   } catch (e) {
-    return { error: 'Falha ao excluir membro.' };
+    console.error('[DELETE_MEMBER_ERROR]', e);
+    return { error: 'Falha ao excluir integrante.' };
   }
 }
 
+/**
+ * Conclui um passo na jornada do integrante.
+ */
 export async function completeJourneyStepAction(data: any) {
   const { orgId } = await auth();
   if (!orgId) return { error: 'Unauthorized' };
@@ -154,19 +159,45 @@ export async function completeJourneyStepAction(data: any) {
     const result = await db.transaction(async (tx) => {
       const [member] = await tx.select().from(members).where(and(eq(members.id, validated.data.memberId), eq(members.organizationId, orgId)));
       if (!member) return { error: 'Membro não encontrado' };
-      await tx.insert(memberJourneys).values({ organizationId: orgId, memberId: validated.data.memberId, step: validated.data.step, notes: validated.data.notes || `Progredido para ${validated.data.step}` });
-      await tx.update(members).set({ currentStep: validated.data.step, updatedAt: new Date() }).where(eq(members.id, validated.data.memberId));
-      await tx.insert(journeyHistory).values({ memberId: validated.data.memberId, oldStep: member.currentStep, newStep: validated.data.step, notes: validated.data.notes });
+
+      await tx.insert(memberJourneys).values({ 
+        organizationId: orgId, 
+        memberId: validated.data.memberId, 
+        step: validated.data.step, 
+        notes: validated.data.notes || `Progredido para ${validated.data.step}` 
+      });
+
+      await tx.update(members).set({ 
+        currentStep: validated.data.step, 
+        updatedAt: new Date() 
+      }).where(eq(members.id, validated.data.memberId));
+
+      await tx.insert(journeyHistory).values({ 
+        memberId: validated.data.memberId, 
+        oldStep: member.currentStep, 
+        newStep: validated.data.step, 
+        notes: validated.data.notes 
+      });
+
       return { success: true, memberName: `${member.firstName} ${member.lastName}` };
     });
 
     if (result.success) {
       await logActivity('PROMOTE', 'MEMBER', `${result.memberName} (${validated.data.step})`).catch(() => { });
-      await inngest.send({ name: 'member/step.completed', data: { memberId: validated.data.memberId, organizationId: orgId, newStep: validated.data.step } }).catch(() => { });
+      await inngest.send({ 
+        name: 'member/step.completed', 
+        data: { 
+          memberId: validated.data.memberId, 
+          organizationId: orgId, 
+          newStep: validated.data.step 
+        } 
+      }).catch(() => { });
+      
       revalidatePath('/[locale]/dashboard', 'layout');
     }
     return result;
   } catch (e) {
-    return { error: 'Erro interno ao processar.' };
+    console.error('[COMPLETE_STEP_ERROR]', e);
+    return { error: 'Erro ao processar jornada.' };
   }
 }

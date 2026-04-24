@@ -4,9 +4,9 @@ import * as React from 'react';
 import type { G12Node } from '@/libs/services/MemberService';
 import {
   ChevronDown, ChevronRight, Maximize2, Crown, Shield,
-  CheckCircle2, ArrowUpCircle, User, Search, Users
+  CheckCircle2, ArrowUpCircle, User, Search, Users, Trash2
 } from 'lucide-react';
-import { completeJourneyStepAction } from '@/app/[locale]/(auth)/dashboard/members/actions';
+import { completeJourneyStepAction, deleteMemberAction } from '@/app/[locale]/(auth)/dashboard/members/actions';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@/libs/I18nNavigation';
 
@@ -130,6 +130,17 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
         >
           <Maximize2 size={14} />
         </Link>
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            if (confirm(`Deseja realmente remover ${node.firstName}?`)) {
+              await deleteMemberAction(node.id);
+            }
+          }}
+          className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
     </div>
   );
