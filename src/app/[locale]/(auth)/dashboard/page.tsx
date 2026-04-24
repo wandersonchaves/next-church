@@ -1,18 +1,23 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { getG12Hierarchy, getG12Stats, getStatsByGeneration } from '@/libs/services/MemberService';
+import { getFilteredG12Hierarchy, getG12Stats, getStatsByGeneration } from '@/libs/services/MemberService';
 import { G12TreeView } from '@/components/G12TreeView';
 import { StatCard } from '@/components/Dashboard/StatCard';
+import { LineageSearch } from '@/components/LineageSearch';
 import {
   Users, UserPlus, Target, Flame,
-  Search, Shield, Crown, TrendingUp,
+  Shield, Crown, TrendingUp,
   Layers, ChevronRight, Activity
 } from 'lucide-react';
 import { Link } from '@/libs/I18nNavigation';
 import { setRequestLocale } from 'next-intl/server';
 import { SeedService } from '@/libs/Seed';
 
-export default async function DashboardPage(props: { params: Promise<{ locale: string }> }) {
+export default async function DashboardPage(props: { 
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ search?: string }>;
+}) {
   const { locale } = await props.params;
+  const { search } = await props.searchParams;
   const { orgId } = await auth();
   setRequestLocale(locale);
 
@@ -28,7 +33,7 @@ export default async function DashboardPage(props: { params: Promise<{ locale: s
 
   // 3. Busca paralela de dados
   const [hierarchy, stats, genStats] = await Promise.all([
-    getG12Hierarchy(orgId),
+    getFilteredG12Hierarchy(orgId, search),
     getG12Stats(orgId),
     getStatsByGeneration(orgId)
   ]);
@@ -116,14 +121,7 @@ export default async function DashboardPage(props: { params: Promise<{ locale: s
               <div className="p-2 bg-amber-100 text-amber-600 rounded-xl"><Crown size={20} /></div>
               <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight italic">Mapa de Linhagem</h2>
             </div>
-            <div className="relative w-full md:w-72">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                placeholder="Pesquisar na linhagem..."
-                className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500/20 transition-all shadow-sm"
-              />
-            </div>
+            <LineageSearch />
           </div>
 
           <div className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl p-6 md:p-8 relative">
