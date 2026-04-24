@@ -90,8 +90,23 @@ export const NotificationService = {
 
       console.log(`[NOTIFICATION_SERVICE] >>> STEP 2: Final Org=${orgId}. Inserting...`);
 
-      // Normaliza IDs
+      // 🛑 TRAVA DE DUPLICIDADE: Verifica se a mensagem já existe pelo externalId
       const extId = data.externalId && String(data.externalId).trim() !== '' ? String(data.externalId) : null;
+      
+      if (extId) {
+        const existing = await db.query.notificationLogs.findFirst({
+          where: and(
+            eq(notificationLogs.externalId, extId),
+            eq(notificationLogs.organizationId, String(orgId))
+          ),
+        });
+
+        if (existing) {
+          console.log(`[NOTIFICATION_SERVICE] >>> SKIP: Message ${extId} already exists. Ignoring duplicate.`);
+          return;
+        }
+      }
+
       const parentId = data.parentExternalId && String(data.parentExternalId).trim() !== '' ? String(data.parentExternalId) : null;
 
       const [inserted] = await db.insert(notificationLogs).values({
