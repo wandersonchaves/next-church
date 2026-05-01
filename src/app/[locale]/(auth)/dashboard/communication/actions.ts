@@ -4,14 +4,52 @@ import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { inngest } from '@/libs/Inngest';
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
+import { db } from '@/libs/DB';
+import { members } from '@/models/Schema';
+import { eq, and, isNull, count } from 'drizzle-orm';
 
 const BroadcastSchema = z.object({
   message: z.string().min(5, 'A mensagem deve ter pelo menos 5 caracteres'),
   filters: z.object({
     currentStep: z.string().optional().nullable().or(z.literal('')),
     generationSlot: z.string().optional().nullable().or(z.literal('')),
+    tag: z.string().optional().nullable().or(z.literal('')),
   }),
 });
+
+export async function getRecipientCountAction(filters: z.infer<typeof BroadcastSchema>['filters']) {
+  const { orgId } = await auth();
+  if (!orgId) return { error: 'Não autorizado' };
+
+  try {
+    const conditions = [
+      eq(members.organizationId, orgId),
+      isNull(members.deletedAt)
+    ];
+
+    if (filters.currentStep) {
+      conditions.push(eq(members.currentStep, filters.currentStep as any));
+    }
+
+    if (filters.generationSlot) {
+      conditions.push(eq(members.generationSlot, Number(filters.generationSlot)));
+    }
+
+    if (filters.tag) {
+      conditions.push(eq(members.kidsNotes, filters.tag));
+    }
+
+    const [result] = await db
+      .select({ total: count() })
+      .from(members)
+      .where(and(...conditions));
+
+    return { success: true, count: result?.total || 0 };
+  } catch (e) {
+    console.error(e);
+    return { error: 'Falha ao contar destinatários' };
+  }
+}
 
 export async function sendBroadcastAction(data: z.infer<typeof BroadcastSchema>) {
   const { orgId } = await auth();

@@ -201,6 +201,10 @@ export const sendBroadcast = inngest.createFunction(
         conditions.push(eq(members.generationSlot, Number(filters.generationSlot)));
       }
 
+      if (filters.tag) {
+        conditions.push(eq(members.kidsNotes, filters.tag));
+      }
+
       return await db.select().from(members).where(and(...conditions));
     });
 

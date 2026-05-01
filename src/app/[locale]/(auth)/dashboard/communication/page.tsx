@@ -1,17 +1,21 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction } from './actions';
+import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction } from './actions';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
+
+const SAFETY_LIMIT = 100;
 
 export default function CommunicationPage() {
   const locale = useLocale();
   const [message, setMessage] = React.useState('');
   const [step, setStep] = React.useState('');
   const [generation, setGeneration] = React.useState('');
+  const [tag, setTag] = React.useState('');
+  const [recipientCount, setRecipientCount] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
   const [status, setStatus] = React.useState<{ connected: boolean; name?: string } | null>(null);
@@ -34,6 +38,21 @@ export default function CommunicationPage() {
     const interval = setInterval(fetchStatus, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Busca estimativa de destinatários quando os filtros mudam
+  React.useEffect(() => {
+    async function updateCount() {
+      const res = await getRecipientCountAction({
+        currentStep: step || null,
+        generationSlot: generation || null,
+        tag: tag || null,
+      });
+      if (res.success) {
+        setRecipientCount(res.count);
+      }
+    }
+    updateCount();
+  }, [step, generation, tag]);
 
   async function handleSync() {
     setSyncing(true);
@@ -59,6 +78,7 @@ export default function CommunicationPage() {
       filters: {
         currentStep: step || null,
         generationSlot: generation || null,
+        tag: tag || null,
       },
     });
 
@@ -149,12 +169,32 @@ export default function CommunicationPage() {
                 className="h-80 w-full resize-none rounded-4xl border-none bg-slate-50 p-6 text-lg font-medium text-slate-700 transition-all outline-none focus:ring-4 focus:ring-indigo-500/5"
               />
 
+              {recipientCount !== null && recipientCount > SAFETY_LIMIT && (
+                <div className="mt-6">
+                  <Alert
+                    type="warning"
+                    title="Meta: Protocolo de Aquecimento"
+                    message={`Números novos devem começar enviando para menos de ${SAFETY_LIMIT} contatos por dia. O envio para ${recipientCount} pessoas agora pode acionar filtros de SPAM. Tente segmentar o envio ou aguardar interações de resposta antes de prosseguir.`}
+                  />
+                </div>
+              )}
+
               <div className="mt-8 flex flex-col items-center justify-between gap-4 sm:flex-row">
-                <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase italic">Processamento Individual via Fila</p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase italic">Processamento Individual via Fila</p>
+                  {recipientCount !== null && (
+                    <div className={`flex items-center gap-1.5 ${recipientCount > SAFETY_LIMIT ? 'text-rose-600' : 'text-indigo-600'}`}>
+                      {recipientCount > SAFETY_LIMIT ? <AlertCircle size={12} /> : <Users size={12} />}
+                      <span className="text-[10px] font-black tracking-widest uppercase">
+                        Estimativa: {recipientCount} {recipientCount === 1 ? 'destinatário' : 'destinatários'}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleSend}
-                  disabled={loading || !message}
-                  className={`flex w-full items-center justify-center gap-3 rounded-2xl px-12 py-4 font-black tracking-widest text-white uppercase shadow-xl transition-all sm:w-auto ${loading ? 'bg-slate-400' : 'bg-indigo-600 shadow-indigo-200 hover:scale-[1.02] active:scale-[0.98]'}`}
+                  disabled={loading || !message || recipientCount === 0}
+                  className={`flex w-full items-center justify-center gap-3 rounded-2xl px-12 py-4 font-black tracking-widest text-white uppercase shadow-xl transition-all sm:w-auto ${loading || recipientCount === 0 ? 'bg-slate-400' : 'bg-indigo-600 shadow-indigo-200 hover:scale-[1.02] active:scale-[0.98]'}`}
                 >
                   {loading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
                   Disparar
@@ -209,6 +249,14 @@ export default function CommunicationPage() {
                         {i + 1}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="tagFilter" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Tag / Evento</label>
+                  <select value={tag} onChange={e => setTag(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                    <option value="">Nenhuma Tag</option>
+                    <option value="BATISMO_2026">Batismo 2026</option>
                   </select>
                 </div>
               </div>
