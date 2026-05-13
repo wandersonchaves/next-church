@@ -28,9 +28,17 @@ export class EvolutionGoClient {
   /**
    * Sends a text message via Evolution GO v2.
    */
-  public async sendMessage(to: string, text: string, organizationId?: string) {
-    if (!this.apiKey) {
-      console.warn('[EVOLUTION_GO] Warning: EVOLUTION_API_KEY not configured.');
+  public async sendMessage(
+    to: string,
+    text: string,
+    organizationId?: string,
+    overrides?: { instanceName?: string; apiKey?: string }
+  ) {
+    const apiKey = overrides?.apiKey || this.apiKey;
+    const instanceName = overrides?.instanceName || this.instanceName;
+
+    if (!apiKey) {
+      console.warn('[EVOLUTION_GO] Warning: API Key not configured.');
       return { sent: false, reason: 'CONFIG_MISSING' };
     }
 
@@ -39,62 +47,74 @@ export class EvolutionGoClient {
       cleanNumber = `55${cleanNumber}`;
     }
 
-    const url = `${this.baseUrl}/send/text`;
+    // Evolution API v2 (Node) uses /message/sendText
+    // Evolution GO v2 uses /send/text
+    const endpoints = [
+      `${this.baseUrl}/message/sendText`,
+      `${this.baseUrl}/send/text`
+    ];
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'apikey': this.apiKey, 
+      'apikey': apiKey,
     };
 
-    if (this.instanceName) {
-      headers.instance = this.instanceName;
+    if (instanceName) {
+      headers.instance = instanceName;
     }
 
-    const options: RequestInit = {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        number: cleanNumber,
-        text: text,
-      }),
-      signal: AbortSignal.timeout(15000),
-    };
+    const body = JSON.stringify({
+      number: cleanNumber,
+      text: text,
+    });
 
-    try {
-      const response = await fetch(url, options);
-      const rawResponseText = await response.text();
+    let lastError = '';
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}: ${rawResponseText.slice(0, 100)}`);
+    for (const url of endpoints) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body,
+          signal: AbortSignal.timeout(10000),
+        });
+
+        const rawResponseText = await response.text();
+
+        if (response.ok) {
+          const data = JSON.parse(rawResponseText);
+          const externalId = data.Info?.ID || data.data?.id || data.key?.id;
+
+          if (organizationId) {
+            NotificationService.saveOutgoingMessage({
+              phone: cleanNumber,
+              content: text,
+              organizationId,
+              status: 'SENT',
+              externalId: String(externalId || ''),
+            }).catch(e => console.error('[EVOLUTION_GO_LOG_ERROR]', e));
+          }
+
+          return { sent: true, data };
+        }
+
+        lastError = `Endpoint ${url} retornou ${response.status}`;
+      } catch (error) {
+        lastError = String(error);
+        console.warn(`[EVOLUTION_GO_RETRY] Failed ${url}:`, error);
       }
-
-      const data = JSON.parse(rawResponseText);
-      
-      // Evolution GO v2 costuma retornar Info.ID ou data.id
-      const externalId = data.Info?.ID || data.data?.id || data.key?.id;
-
-      if (organizationId) {
-        NotificationService.saveOutgoingMessage({
-          phone: cleanNumber,
-          content: text,
-          organizationId,
-          status: 'SENT',
-          externalId: String(externalId || ''),
-        }).catch(e => console.error('[EVOLUTION_GO_LOG_ERROR]', e));
-      }
-
-      return { sent: true, data };
-    } catch (error) {
-      console.error('[EVOLUTION_GO_SEND_ERROR]', error);
-      if (organizationId) {
-        NotificationService.saveOutgoingMessage({
-          phone: cleanNumber,
-          content: text,
-          organizationId,
-          status: 'FAILED',
-        }).catch(e => console.error('[EVOLUTION_GO_LOG_ERROR]', e));
-      }
-      return { sent: false, error: String(error) };
     }
+
+    if (organizationId) {
+      NotificationService.saveOutgoingMessage({
+        phone: cleanNumber,
+        content: text,
+        organizationId,
+        status: 'FAILED',
+      }).catch(e => console.error('[EVOLUTION_GO_LOG_ERROR]', e));
+    }
+
+    return { sent: false, error: lastError };
   }
 
   /**
@@ -137,7 +157,7 @@ export class EvolutionGoClient {
       });
 
       if (!response.ok) return { connected: false };
-      
+
       const result = await response.json();
       return {
         connected: result.data?.Connected === true,

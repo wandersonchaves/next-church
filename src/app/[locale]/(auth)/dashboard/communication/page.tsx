@@ -119,7 +119,7 @@ export default function CommunicationPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link 
+            <Link
               href={`/${locale}/dashboard/communication/responses`}
               className="flex items-center gap-2 rounded-2xl bg-indigo-100 px-6 py-3 text-[10px] font-black tracking-widest text-indigo-600 uppercase transition-all hover:bg-indigo-200"
             >
@@ -127,7 +127,7 @@ export default function CommunicationPage() {
               Interações
             </Link>
 
-            <Link 
+            <Link
               href={`/${locale}/dashboard/communication/inbox`}
               className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-slate-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
@@ -146,6 +146,15 @@ export default function CommunicationPage() {
             </button>
           </div>
         </header>
+
+        {status && !status.connected && (
+          <Alert
+            type="warning"
+            title="Conexão Requerida"
+            message="Sua instância do WhatsApp está desconectada. Você precisa escanear o QR Code ou reconectar o dispositivo para que as mensagens automáticas e o envio em massa funcionem corretamente."
+            className="border-rose-200 bg-rose-50 text-rose-800"
+          />
+        )}
 
         {/* CONTÊINER PRINCIPAL COM FLEX WRAP (Fase 4) */}
         <div className="flex flex-col gap-8 lg:flex-row">

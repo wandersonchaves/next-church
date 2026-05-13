@@ -2,7 +2,7 @@
   "name": "next-church",
   "author": "Wanderson Chaves (https://github.com/wandersonchaves)",
   "engines": {
-    "node": ">=22.14.0"
+    "node": ">=20.18.0"
   },
   "scripts": {
     "build-local": "run-p db-server:memory build:next --race",
@@ -44,7 +44,7 @@
     "csv-parse": "^6.2.1",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
-    "inngest": "^3.52.6",
+    "inngest": "^4.4.0",
     "lucide-react": "^0.479.0",
     "next": "^16.1.6",
     "next-intl": "^4.8.3",

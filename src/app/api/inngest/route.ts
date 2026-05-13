@@ -7,6 +7,7 @@ import {
   onWhatsAppWebhook,
   sendBroadcast,
   weeklyLeadershipReport,
+  watchdogWhatsAppConnection,
 } from '@/libs/services/InngestFunctions';
 
 export const { GET, POST, PUT } = serve({
@@ -18,5 +19,6 @@ export const { GET, POST, PUT } = serve({
     dailyBirthdayCheck,
     weeklyLeadershipReport,
     onWhatsAppWebhook,
+    watchdogWhatsAppConnection,
   ],
 });
