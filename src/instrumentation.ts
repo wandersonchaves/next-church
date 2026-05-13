@@ -36,6 +36,20 @@ export async function register() {
       Sentry.init(sentryOptions);
     }
   }
+
+  // Monitoramento de Conexão WhatsApp no Boot (Deploy)
+  if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.NODE_ENV === 'production') {
+    try {
+      const { inngest } = await import('@/libs/Inngest');
+      await inngest.send({ 
+        name: 'system/connection.check', 
+        data: { reason: 'deployment_boot' } 
+      });
+      console.log('🚀 [BOOT] Verificação de conexão WhatsApp disparada com sucesso.');
+    } catch (error) {
+      console.error('❌ [BOOT_ERROR] Falha ao disparar verificação de conexão:', error);
+    }
+  }
 }
 
 export const onRequestError = Sentry.captureRequestError;

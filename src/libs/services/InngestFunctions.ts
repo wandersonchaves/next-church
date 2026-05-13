@@ -17,8 +17,11 @@ import { EvolutionGoClient } from '@/libs/evolution-go/client';
 export const watchdogWhatsAppConnection = inngest.createFunction(
   { 
     id: "watchdog-whatsapp-connection", 
-    name: "Cron: Monitor de Conexão WhatsApp",
-    triggers: [{ cron: "0 * * * *" }]
+    name: "Monitor de Conexão WhatsApp",
+    triggers: [
+      { cron: "0 * * * *" },
+      { event: "system/connection.check" }
+    ]
   },
   async ({ step }) => {
     const status = await step.run("check-connection", async () => {
@@ -79,8 +82,8 @@ async function getChurchName(orgId: string) {
  * Evento: Boas-vindas para novo membro.
  */
 export const onMemberCreated = inngest.createFunction(
-  { 
-    id: 'on-member-created', 
+  {
+    id: 'on-member-created',
     name: 'Novo Membro: Boas-vindas',
     triggers: [{ event: 'member/created' }]
   },
@@ -121,8 +124,8 @@ export const onMemberCreated = inngest.createFunction(
  * Evento: Conclusão de Passo da Jornada.
  */
 export const onStepCompleted = inngest.createFunction(
-  { 
-    id: 'on-step-completed', 
+  {
+    id: 'on-step-completed',
     name: 'Jornada: Parabéns pelo Passo',
     triggers: [{ event: 'member/step.completed' }]
   },
@@ -161,8 +164,8 @@ export const onStepCompleted = inngest.createFunction(
  * Cron Job: Relatório Semanal de Atividades.
  */
 export const weeklyLeadershipReport = inngest.createFunction(
-  { 
-    id: "weekly-leadership-report", 
+  {
+    id: "weekly-leadership-report",
     name: "Cron: Relatório Semanal",
     triggers: [{ cron: "0 11 * * 1" }]
   },
@@ -222,8 +225,8 @@ export const weeklyLeadershipReport = inngest.createFunction(
  * Cron Job: Verificação diária de aniversariantes.
  */
 export const dailyBirthdayCheck = inngest.createFunction(
-  { 
-    id: "daily-birthday-check", 
+  {
+    id: "daily-birthday-check",
     name: "Cron: Parabéns Aniversariantes",
     triggers: [{ cron: "15 12 * * *" }]
   },
@@ -259,8 +262,8 @@ export const dailyBirthdayCheck = inngest.createFunction(
  * Ação de Transmissão (Broadcast).
  */
 export const sendBroadcast = inngest.createFunction(
-  { 
-    id: 'send-broadcast', 
+  {
+    id: 'send-broadcast',
     name: 'Comunicação: Transmissão em Massa',
     triggers: [{ event: 'notification/broadcast.send' }]
   },
@@ -328,8 +331,8 @@ export const sendBroadcast = inngest.createFunction(
  * Evento: Processamento Assíncrono de Webhook (WhatsApp).
  */
 export const onWhatsAppWebhook = inngest.createFunction(
-  { 
-    id: 'on-whatsapp-webhook-final', 
+  {
+    id: 'on-whatsapp-webhook-final',
     name: 'WhatsApp: Webhook Engine',
     triggers: [{ event: 'whatsapp/webhook.received' }]
   },
