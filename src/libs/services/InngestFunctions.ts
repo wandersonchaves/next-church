@@ -8,6 +8,59 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { AppConfig } from '@/utils/AppConfig';
 import { NotificationService } from './NotificationService';
 import { Env } from '@/libs/Env';
+import { EvolutionGoClient } from '@/libs/evolution-go/client';
+
+/**
+ * Cron Job: Monitor de Conexão WhatsApp.
+ * Verifica a cada 1 hora se a instância está conectada.
+ */
+export const watchdogWhatsAppConnection = inngest.createFunction(
+  { 
+    id: "watchdog-whatsapp-connection", 
+    name: "Cron: Monitor de Conexão WhatsApp",
+    triggers: [{ cron: "0 * * * *" }]
+  },
+  async ({ step }) => {
+    const status = await step.run("check-connection", async () => {
+      const client = EvolutionGoClient.getInstance();
+      return await client.getInstanceStatus();
+    });
+
+    if (!status.connected) {
+      await step.run("log-disconnection", async () => {
+        await NotificationService.logConnectionState(
+          Env.EVOLUTION_INSTANCE || 'unknown',
+          'DISCONNECTED_WATCHDOG',
+          undefined,
+          'System Watchdog'
+        );
+      });
+
+      if (Env.ADMIN_PHONE) {
+        await step.run("send-admin-alert", async () => {
+          const message = [
+            `🚨 *ALERTA DE DESCONEXÃO: ${AppConfig.name.toUpperCase()}*`,
+            `Sua instância do WhatsApp está desconectada.`,
+            ``,
+            `Isso pode impedir o envio de mensagens automáticas e relatórios agendados.`,
+            `Por favor, acesse o painel e reconecte seu dispositivo.`,
+            ``,
+            `_Verificado em: ${new Date().toLocaleString('pt-BR')}_`
+          ].join('\n');
+
+          await WhatsAppService.sendMessage({
+            phone: Env.ADMIN_PHONE!,
+            message: message,
+            overrides: {
+              instanceName: Env.ALERT_EVOLUTION_INSTANCE,
+              apiKey: Env.ALERT_EVOLUTION_API_KEY
+            }
+          });
+        });
+      }
+    }
+  }
+);
 
 /**
  * Helper para buscar o nome da igreja no Clerk.
@@ -26,9 +79,12 @@ async function getChurchName(orgId: string) {
  * Evento: Boas-vindas para novo membro.
  */
 export const onMemberCreated = inngest.createFunction(
-  { id: 'on-member-created', name: 'Novo Membro: Boas-vindas' },
-  { event: 'member/created' },
-  async ({ event, step }) => {
+  { 
+    id: 'on-member-created', 
+    name: 'Novo Membro: Boas-vindas',
+    triggers: [{ event: 'member/created' }]
+  },
+  async ({ event, step }: any) => {
     const { memberId, organizationId } = event.data;
 
     const churchName = await step.run('get-church-name', async () => await getChurchName(organizationId));
@@ -38,9 +94,9 @@ export const onMemberCreated = inngest.createFunction(
         .select()
         .from(members)
         .where(and(
-          eq(members.id, memberId), 
+          eq(members.id, memberId),
           eq(members.organizationId, organizationId),
-          isNull(members.deletedAt) // Valida se não foi excluído
+          isNull(members.deletedAt)
         ))
         .limit(1);
       return result;
@@ -49,7 +105,11 @@ export const onMemberCreated = inngest.createFunction(
     if (member?.phone) {
       await step.run('send-whatsapp', async () => {
         const welcomeMessage = `Olá ${member.firstName}! Seja muito bem-vindo(a) à família *${churchName}*. Estamos felizes com sua decisão! 🙌`;
-        await WhatsAppService.sendMessage(member.phone!, welcomeMessage, organizationId);
+        await WhatsAppService.sendMessage({
+          phone: member.phone!,
+          message: welcomeMessage,
+          organizationId: organizationId
+        });
       });
     }
 
@@ -61,9 +121,12 @@ export const onMemberCreated = inngest.createFunction(
  * Evento: Conclusão de Passo da Jornada.
  */
 export const onStepCompleted = inngest.createFunction(
-  { id: 'on-step-completed', name: 'Jornada: Parabéns pelo Passo' },
-  { event: 'member/step.completed' },
-  async ({ event, step }) => {
+  { 
+    id: 'on-step-completed', 
+    name: 'Jornada: Parabéns pelo Passo',
+    triggers: [{ event: 'member/step.completed' }]
+  },
+  async ({ event, step }: any) => {
     const { memberId, organizationId, newStep } = event.data;
 
     const churchName = await step.run('get-church-name', async () => await getChurchName(organizationId));
@@ -73,9 +136,9 @@ export const onStepCompleted = inngest.createFunction(
         .select()
         .from(members)
         .where(and(
-          eq(members.id, memberId), 
+          eq(members.id, memberId),
           eq(members.organizationId, organizationId),
-          isNull(members.deletedAt) // Valida se não foi excluído
+          isNull(members.deletedAt)
         ))
         .limit(1);
       return result;
@@ -84,7 +147,11 @@ export const onStepCompleted = inngest.createFunction(
     if (member?.phone) {
       await step.run('send-congrats', async () => {
         const message = `Parabéns ${member.firstName}! Você concluiu o passo *${newStep.replace(/_/g, ' ')}* na jornada da *${churchName}*. Continue firme! ✨`;
-        await WhatsAppService.sendMessage(member.phone!, message, organizationId);
+        await WhatsAppService.sendMessage({
+          phone: member.phone!,
+          message: message,
+          organizationId: organizationId
+        });
       });
     }
   },
@@ -92,12 +159,14 @@ export const onStepCompleted = inngest.createFunction(
 
 /**
  * Cron Job: Relatório Semanal de Atividades.
- * Roda toda Segunda-feira às 08:00 AM (Brasília).
  */
 export const weeklyLeadershipReport = inngest.createFunction(
-  { id: "weekly-leadership-report", name: "Cron: Relatório Semanal" },
-  { cron: "0 11 * * 1" }, // 11:00 UTC = 08:00 AM Brasil (Segunda)
-  async ({ step }) => {
+  { 
+    id: "weekly-leadership-report", 
+    name: "Cron: Relatório Semanal",
+    triggers: [{ cron: "0 11 * * 1" }]
+  },
+  async ({ step }: any) => {
     const orgs = await step.run("fetch-organizations", async () => {
       return await db.selectDistinct({ id: members.organizationId }).from(members);
     });
@@ -135,10 +204,13 @@ export const weeklyLeadershipReport = inngest.createFunction(
               `_Gerado por ${AppConfig.name}_`
             ].join('\n');
 
-            await WhatsAppService.sendMessage(pastor.phone!, message, org.id);
+            await WhatsAppService.sendMessage({
+              phone: pastor.phone!,
+              message: message,
+              organizationId: org.id
+            });
           });
-          
-          // Pequeno atraso entre organizações para evitar picos
+
           await step.sleep(`wait-org-${org.id}`, '3s');
         }
       }
@@ -147,17 +219,20 @@ export const weeklyLeadershipReport = inngest.createFunction(
 );
 
 /**
- * Cron Job: Verificação diária de aniversariantes em 09:15 AM (Brasília).
+ * Cron Job: Verificação diária de aniversariantes.
  */
 export const dailyBirthdayCheck = inngest.createFunction(
-  { id: "daily-birthday-check", name: "Cron: Parabéns Aniversariantes" },
-  { cron: "15 12 * * *" }, // 12:15 UTC = 09:15 AM Brasil
-  async ({ step }) => {
+  { 
+    id: "daily-birthday-check", 
+    name: "Cron: Parabéns Aniversariantes",
+    triggers: [{ cron: "15 12 * * *" }]
+  },
+  async ({ step }: any) => {
     const membersList = await step.run("fetch-birthday-members", async () => {
       return await db.select().from(members).where(
         and(
           sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`,
-          isNull(members.deletedAt) // 🛡️ SEGURANÇA: Não parabenizar membros excluídos
+          isNull(members.deletedAt)
         )
       );
     });
@@ -166,10 +241,13 @@ export const dailyBirthdayCheck = inngest.createFunction(
       if (member.phone) {
         await step.run(`send-birthday-msg-${member.id}`, async () => {
           const msg = `Que dia especial! Feliz aniversário ${member.firstName} 😃 Nós do TelePaz Filadélfia ✨ desejamos um novo ano abençoado. Celebramos sua vida, pois você é importante para Deus e para nós. Que o Senhor abençoe você e toda a sua família. 🙌🏼✨`;
-          await WhatsAppService.sendMessage(member.phone!, msg, member.organizationId);
+          await WhatsAppService.sendMessage({
+            phone: member.phone!,
+            message: msg,
+            organizationId: member.organizationId
+          });
         });
 
-        // Throttling para aniversariantes: 5-10s entre mensagens
         const delay = Math.floor(Math.random() * 5 + 5);
         await step.sleep(`wait-bday-${member.id}`, `${delay}s`);
       }
@@ -181,22 +259,24 @@ export const dailyBirthdayCheck = inngest.createFunction(
  * Ação de Transmissão (Broadcast).
  */
 export const sendBroadcast = inngest.createFunction(
-  { id: 'send-broadcast', name: 'Comunicação: Transmissão em Massa' },
-  { event: 'notification/broadcast.send' },
-  async ({ event, step }) => {
+  { 
+    id: 'send-broadcast', 
+    name: 'Comunicação: Transmissão em Massa',
+    triggers: [{ event: 'notification/broadcast.send' }]
+  },
+  async ({ event, step }: { event: any; step: any }) => {
     const { organizationId, filters, message } = event.data;
 
-    // 1. Busca os membros com base nos filtros
     const recipients = await step.run('fetch-recipients', async () => {
       const conditions = [
         eq(members.organizationId, organizationId),
-        isNull(members.deletedAt) // 🛡️ SEGURANÇA: Ignora membros excluídos
+        isNull(members.deletedAt)
       ];
-      
+
       if (filters.currentStep) {
         conditions.push(eq(members.currentStep, filters.currentStep));
       }
-      
+
       if (filters.generationSlot) {
         conditions.push(eq(members.generationSlot, Number(filters.generationSlot)));
       }
@@ -208,22 +288,20 @@ export const sendBroadcast = inngest.createFunction(
       return await db.select().from(members).where(and(...conditions));
     });
 
-    // 2. Envio individual com throttling e proteção de número novo
     let count = 0;
     for (const member of recipients) {
       if (member.phone) {
         count++;
-        
-        // Personalização básica: substitui {name} pelo primeiro nome
         const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
 
         await step.run(`send-${member.id}`, async () => {
-          const result: any = await WhatsAppService.sendMessage(member.phone!, personalizedMessage, organizationId);
-          
-          // Captura o ID da mensagem de forma segura (Evolution GO v2 ou v1)
+          const result: any = await WhatsAppService.sendMessage({
+            phone: member.phone!,
+            message: personalizedMessage,
+            organizationId: organizationId
+          });
           const msgId = result?.key?.id || result?.data?.key?.id || result?.data?.id;
 
-          // Salva o log da mensagem enviada para permitir o vínculo de respostas depois
           await NotificationService.saveOutgoingMessage({
             phone: member.phone!,
             content: personalizedMessage,
@@ -233,11 +311,9 @@ export const sendBroadcast = inngest.createFunction(
           });
         });
 
-        // A cada 30 mensagens, faz uma pausa maior de 2 minutos (Batch cooldown)
         if (count % 30 === 0) {
           await step.sleep(`batch-pause-${count}`, '2m');
         } else {
-          // Throttling agressivo e aleatório: entre 8 e 20 segundos por mensagem
           const delay = Math.floor(Math.random() * 12 + 8);
           await step.sleep(`wait-${member.id}`, `${delay}s`);
         }
@@ -252,103 +328,62 @@ export const sendBroadcast = inngest.createFunction(
  * Evento: Processamento Assíncrono de Webhook (WhatsApp).
  */
 export const onWhatsAppWebhook = inngest.createFunction(
-  { id: 'on-whatsapp-webhook-final', name: 'WhatsApp: Webhook Engine' },
-  { event: 'whatsapp/webhook.received' },
-  async ({ event, step }) => {
-    console.log("🔥 [INNGEST_TRIGGER] Função iniciada com sucesso!");
-    
-    // Pegamos do data (que contém o body do webhook) ou diretamente do payload do evento
+  { 
+    id: 'on-whatsapp-webhook-final', 
+    name: 'WhatsApp: Webhook Engine',
+    triggers: [{ event: 'whatsapp/webhook.received' }]
+  },
+  async ({ event, step }: { event: any; step: any }) => {
     const payload = event.data;
     const normalizedEvent = (payload.normalizedEvent || payload.event || '').toUpperCase();
-    
-    // Extração robusta de instância (Pode estar no topo ou dentro de data)
     const instanceId = payload.instanceId || payload.data?.instanceId || 'unknown';
     const instanceName = payload.instanceName || payload.data?.instanceName || 'unknown';
 
-    // FILTRO DE SEGURANÇA: Só processa se a instância bater com a configurada
-    // Se a variável EVOLUTION_INSTANCE não estiver definida, processamos tudo (fallback)
-    if (Env.EVOLUTION_INSTANCE && 
-        instanceId !== Env.EVOLUTION_INSTANCE && 
-        instanceName !== Env.EVOLUTION_INSTANCE) {
-      console.log(`[INNGEST] Ignoring webhook from unauthorized instance: ${instanceId}/${instanceName}. Expected: ${Env.EVOLUTION_INSTANCE}`);
+    if (Env.EVOLUTION_INSTANCE &&
+      instanceId !== Env.EVOLUTION_INSTANCE &&
+      instanceName !== Env.EVOLUTION_INSTANCE) {
       return { status: 'ignored_unauthorized_instance' };
     }
 
-    console.log(`[INNGEST] Processing WhatsApp Webhook: ${normalizedEvent} for Instance: ${instanceId} (${instanceName})`);
-
-    // Processamento de Mensagens
     if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
-      // Evolution v2 envia os dados no topo do payload.data se for MESSAGE
-      // Baileys v1 envia em data.data se for UPSERT
       const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? payload.data?.data : (payload.data || payload);
-      
-      if (!messageData) {
-        console.warn('[INNGEST] No message data found in payload');
-        return { status: 'no_data' };
-      }
+      if (!messageData) return { status: 'no_data' };
 
       const senderJid = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
       const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
       let sender = senderJid;
       const chat = messageData.Info?.Chat || sender;
 
-      // Normalização de Sender
       if (sender && !sender.includes('@') && sender.endsWith('.net')) {
         sender = sender.replace('s.whatsapp.net', '@s.whatsapp.net');
       }
 
       const isGroup = messageData.Info?.IsGroup || sender?.includes('@g.us') || chat?.includes('@g.us');
-      const isStatusOrNewsletter = chat?.includes('status') || chat?.includes('newsletter');
-      
-      const msg = messageData.message || messageData.Message;
-      
-      if (isGroup || isStatusOrNewsletter) {
-        console.log(`[INNGEST] Ignoring group/newsletter/status message from: ${sender}`);
-        return { status: 'ignored_group_or_newsletter' };
-      }
+      if (isGroup || isFromMe) return { status: 'ignored' };
 
-      if (isFromMe) {
-        console.log(`[INNGEST] Ignoring message from self: ${sender}`);
-        return { status: 'ignored_from_me' };
-      }
-
-      let content = msg?.conversation || 
-                      msg?.extendedTextMessage?.text ||
-                      msg?.imageMessage?.caption ||
-                      msg?.videoMessage?.caption ||
-                      messageData.content || 
-                      messageData.text;
-
-      if (!content && msg?.protocolMessage) content = "[Mensagem de Sistema]";
+      let content = messageData.message?.conversation || messageData.content || messageData.text;
       if (!content) content = "[Mídia]";
-
-      const externalId = messageData.key?.id ?? messageData.Info?.ID;
-      const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
-      const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
 
       if (sender && content) {
         await step.run('save-incoming-message', async () => {
           await NotificationService.saveIncomingMessage({
             sender,
             content: String(content),
-            instanceId: String(instanceId || ''),
-            instanceName: String(instanceName || ''),
-            externalId: String(externalId || ''),
-            parentExternalId: String(parentExternalId || ''),
+            instanceId: String(instanceId),
+            instanceName: String(instanceName),
           });
         });
       }
     }
 
-    // Processamento de Conexão
-    if (['CONNECTION', 'CONNECTION_UPDATE', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
+    if (['CONNECTION', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
       await step.run('log-connection-state', async () => {
         const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || payload.data?.state === 'open';
         const state = isConnected ? 'CONNECTED' : 'LOGGED_OUT';
-        await NotificationService.logConnectionState(String(instanceId || ''), state, undefined, String(instanceName || ''));
+        await NotificationService.logConnectionState(String(instanceId), state, undefined, String(instanceName));
       });
     }
 
-    return { status: 'processed', event: normalizedEvent };
+    return { status: 'processed' };
   },
 );

@@ -1,4 +1,3 @@
-
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
 
 /**
@@ -8,15 +7,18 @@ import { EvolutionGoClient } from '@/libs/evolution-go/client';
 export const WhatsAppService = {
   /**
    * Envia uma mensagem de texto via Evolution GO v2.
-   * @param phone - O número do telefone (ex: 86995206925).
-   * @param message - O conteúdo da mensagem em texto.
-   * @param organizationId - Opcional, para fins de rastreabilidade.
    */
-  sendMessage: async (phone: string, message: string, organizationId?: string) => {
+  sendMessage: async (params: {
+    phone: string;
+    message: string;
+    organizationId?: string;
+    overrides?: { instanceName?: string; apiKey?: string };
+  }) => {
+    const { phone, message, organizationId, overrides } = params;
     const client = EvolutionGoClient.getInstance();
     
     try {
-      const result = await client.sendMessage(phone, message, organizationId);
+      const result = await client.sendMessage(phone, message, organizationId, overrides);
       return result;
     } catch (error) {
       console.error('[WHATSAPP_SERVICE_ERROR]', error);

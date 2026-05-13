@@ -159,7 +159,11 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
       // Disparo de WhatsApp
       if (SEND_WHATSAPP && phone) {
         console.log(`   [WA] Enviando para ${phone}...`);
-        await WhatsAppService.sendMessage(phone, WHATSAPP_MESSAGE_TEMPLATE(firstName), ORG_ID);
+        await WhatsAppService.sendMessage({
+          phone, 
+          message: WHATSAPP_MESSAGE_TEMPLATE(firstName), 
+          organizationId: ORG_ID
+        });
       }
 
       count++;
