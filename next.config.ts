@@ -14,6 +14,10 @@ const baseConfig: NextConfig = {
   },
   poweredByHeader: false,
   reactStrictMode: true,
+  generateBuildId: async () => {
+    // This ensures build IDs are consistent across deployments
+    return 'next-church-v1';
+  },
   reactCompiler: process.env.NODE_ENV === 'production',
   outputFileTracingIncludes: {
     '/': ['./migrations/**/*'],
