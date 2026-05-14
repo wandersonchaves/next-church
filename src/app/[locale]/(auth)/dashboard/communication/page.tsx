@@ -292,7 +292,7 @@ export default function CommunicationPage() {
                         <Loader2 className="animate-spin text-indigo-600" size={40} />
                         <p className="text-[9px] font-black text-indigo-400 uppercase">Gerando QR...</p>
                       </div>
-                    ) : qrCode ? (
+                    ) : qrCode && typeof qrCode === 'string' ? (
                       <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain p-2" />
                     ) : (
                       <div className="p-6">

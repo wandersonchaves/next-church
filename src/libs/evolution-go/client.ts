@@ -188,8 +188,8 @@ export class EvolutionGoClient {
       });
 
       const result = await response.json();
-      // Evolution Go pode retornar o QR em result.data ou result.data.qrcode
-      const qr = result.data?.qrcode || result.data;
+      // Garante que pegamos a string do QR Code, ignorando objetos extras
+      const qr = typeof result.data === 'string' ? result.data : (result.data?.qrcode || null);
       
       if (!response.ok || !qr) return { error: `QR não disponível ainda` };
       
@@ -223,11 +223,11 @@ export class EvolutionGoClient {
       });
 
       const result = await response.json();
+      const qr = typeof result.data === 'string' ? result.data : (result.data?.qrcode || null);
       
-      // Se a conexão for bem sucedida, ela pode já trazer o QR
       return { 
         success: response.ok, 
-        data: result.data?.qrcode || result.data,
+        data: qr,
         message: result.message 
       };
     } catch (error) {
