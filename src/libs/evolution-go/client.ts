@@ -257,9 +257,16 @@ export class EvolutionGoClient {
       });
 
       const result = await response.json();
+      
+      // Evolution GO v2 pode retornar data: "CODE" ou data: { PairingCode: "CODE" }
+      let code = result.data;
+      if (typeof code === 'object' && code !== null) {
+        code = code.PairingCode || code.code || JSON.stringify(code);
+      }
+
       return { 
         success: response.ok, 
-        code: result.data?.code || result.data // O código de 8 dígitos
+        code: String(code || '') 
       };
     } catch (error) {
       return { error: String(error) };

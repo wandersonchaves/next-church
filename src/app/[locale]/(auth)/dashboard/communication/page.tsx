@@ -260,7 +260,9 @@ export default function CommunicationPage() {
                   {pairingCode && (
                     <div className="mt-4 rounded-2xl bg-indigo-50 p-4 text-center">
                       <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Seu Código de 8 dígitos</p>
-                      <p className="text-2xl font-black tracking-[0.3em] text-indigo-600 my-1">{pairingCode}</p>
+                      <p className="text-2xl font-black tracking-[0.3em] text-indigo-600 my-1">
+                        {typeof pairingCode === 'string' ? pairingCode : 'Código Gerado'}
+                      </p>
                       <p className="text-[10px] font-medium text-indigo-400 leading-tight">No WhatsApp do seu celular, vá em: <br/> Aparelhos Conectados {'>'} Conectar com número de telefone.</p>
                     </div>
                   )}
