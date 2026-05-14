@@ -20,7 +20,7 @@ export const watchdogWhatsAppConnection = inngest.createFunction(
     id: "watchdog-whatsapp-connection",
     name: "Monitor de Conexão WhatsApp",
     triggers: [
-      { cron: "0 * * * *" },
+      { cron: "0 */3 * * *" },
       { event: "system/connection.check" }
     ]
   },
