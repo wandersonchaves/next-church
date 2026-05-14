@@ -15,8 +15,9 @@ const baseConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   generateBuildId: async () => {
-    // This ensures build IDs are consistent across deployments
-    return 'next-church-v1';
+    // Retorna o hash do commit se disponível (Railway expõe RAILWAY_GIT_COMMIT_SHA)
+    // Caso contrário, usa um timestamp para garantir unicidade
+    return process.env.RAILWAY_GIT_COMMIT_SHA || `build-${Date.now()}`;
   },
   reactCompiler: process.env.NODE_ENV === 'production',
   outputFileTracingIncludes: {

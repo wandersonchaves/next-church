@@ -8,6 +8,6 @@ export const inngest = new Inngest({
   id: 'next-church',
   eventKey: Env.INNGEST_EVENT_KEY,
   signingKey: Env.INNGEST_SIGNING_KEY,
-  // Para produção, usamos a URL oficial de eventos
-  baseUrl: process.env.NODE_ENV === 'production' ? 'https://event.inngest.com' : undefined,
+  // api.inngest.com é o endpoint mais estável para o SDK v4
+  baseUrl: process.env.NODE_ENV === 'production' ? 'https://api.inngest.com/' : undefined,
 });
