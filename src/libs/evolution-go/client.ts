@@ -187,10 +187,13 @@ export class EvolutionGoClient {
         cache: 'no-store'
       });
 
-      if (!response.ok) return { error: `HTTP Error ${response.status}` };
-      
       const result = await response.json();
-      return { success: true, data: result.data }; // Base64 ou string do QR
+      // Evolution Go pode retornar o QR em result.data ou result.data.qrcode
+      const qr = result.data?.qrcode || result.data;
+      
+      if (!response.ok || !qr) return { error: `QR não disponível ainda` };
+      
+      return { success: true, data: qr };
     } catch (error) {
       return { error: String(error) };
     }
@@ -220,7 +223,13 @@ export class EvolutionGoClient {
       });
 
       const result = await response.json();
-      return { success: response.ok, data: result };
+      
+      // Se a conexão for bem sucedida, ela pode já trazer o QR
+      return { 
+        success: response.ok, 
+        data: result.data?.qrcode || result.data,
+        message: result.message 
+      };
     } catch (error) {
       return { error: String(error) };
     }
@@ -242,13 +251,16 @@ export class EvolutionGoClient {
           'instance': this.instanceName
         },
         body: JSON.stringify({
-          phone,
+          phone: phone.replace(/\D/g, ''),
           subscribe: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
         }),
       });
 
       const result = await response.json();
-      return { success: response.ok, data: result };
+      return { 
+        success: response.ok, 
+        code: result.data?.code || result.data // O código de 8 dígitos
+      };
     } catch (error) {
       return { error: String(error) };
     }

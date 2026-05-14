@@ -1,9 +1,9 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle, RefreshCw, Smartphone } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle, RefreshCw, Smartphone, Key } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction, getQRCodeAction, connectInstanceAction } from './actions';
+import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction, getQRCodeAction, connectInstanceAction, pairInstanceAction } from './actions';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 
@@ -20,6 +20,8 @@ export default function CommunicationPage() {
   const [syncing, setSyncing] = React.useState(false);
   const [status, setStatus] = React.useState<{ connected: boolean; loggedIn?: boolean; name?: string } | null>(null);
   const [qrCode, setQrCode] = React.useState<string | null>(null);
+  const [pairingCode, setPairingCode] = React.useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = React.useState('');
   const [qrLoading, setQrLoading] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -35,20 +37,21 @@ export default function CommunicationPage() {
           name: res.status.name as string | undefined
         });
 
-        // Se estiver conectado mas não logado, tenta buscar o QR Code
-        if (res.status.connected && !res.status.loggedIn) {
+        // Se estiver conectado mas não logado, tenta buscar o QR Code se não tivermos um
+        if (res.status.connected && !res.status.loggedIn && !qrCode && !pairingCode) {
           handleFetchQR();
         }
       }
     }
     fetchStatus();
-    // Refresh a cada 1 minuto
-    const interval = setInterval(fetchStatus, 60000);
+    // Refresh a cada 30 segundos se estiver desconectado
+    const interval = setInterval(fetchStatus, status?.loggedIn ? 60000 : 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [status?.loggedIn, qrCode, pairingCode]);
 
   async function handleFetchQR() {
     setQrLoading(true);
+    setPairingCode(null);
     const res = await getQRCodeAction();
     if (res.success && res.data) {
       setQrCode(res.data);
@@ -58,10 +61,54 @@ export default function CommunicationPage() {
 
   async function handleConnect() {
     setQrLoading(true);
+    setError(null);
+    setQrCode(null);
+    setPairingCode(null);
+
     const res = await connectInstanceAction();
     if (res.success) {
-      // Tenta buscar o QR novamente após conectar
-      setTimeout(handleFetchQR, 2000);
+      // Se a conexão já trouxe o QR, usamos ele
+      if (res.data) {
+        setQrCode(res.data);
+        setQrLoading(false);
+      } else {
+        // Senão, fazemos polling por 10 segundos
+        let attempts = 0;
+        const poll = setInterval(async () => {
+          attempts++;
+          const qrRes = await getQRCodeAction();
+          if (qrRes.success && qrRes.data) {
+            setQrCode(qrRes.data);
+            clearInterval(poll);
+            setQrLoading(false);
+          }
+          if (attempts >= 5) {
+            clearInterval(poll);
+            setQrLoading(false);
+            if (!qrCode) setError("QR Code demorou muito para gerar. Tente atualizar.");
+          }
+        }, 2000);
+      }
+    } else {
+      setError("Falha ao iniciar conexão da instância.");
+      setQrLoading(false);
+    }
+  }
+
+  async function handlePair() {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      alert("Digite um número válido com DDD (ex: 86995206925)");
+      return;
+    }
+    setQrLoading(true);
+    setQrCode(null);
+    setPairingCode(null);
+    
+    const res = await pairInstanceAction(phoneNumber);
+    if (res.success && res.code) {
+      setPairingCode(res.code);
+    } else {
+      setError("Falha ao gerar código de pareamento. Verifique se o número está correto.");
     }
     setQrLoading(false);
   }
@@ -176,47 +223,95 @@ export default function CommunicationPage() {
 
         {status && (!status.connected || !status.loggedIn) && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-4">
               <Alert
                 type="warning"
                 title="Conexão Requerida"
                 message={!status.connected 
-                  ? "Sua instância do WhatsApp está desconectada do servidor Evolution. Clique em 'Conectar Instância' para iniciar."
-                  : "Sua instância está online, mas você precisa escanear o QR Code para realizar o login e habilitar o envio de mensagens."
+                  ? "Sua instância do WhatsApp está desconectada do servidor Evolution. Clique em 'Conectar Instância' para iniciar o motor de conexão."
+                  : "Sua instância está online, mas você precisa realizar o login. Escaneie o QR Code ao lado ou use o Código de Pareamento."
                 }
-                className="border-rose-200 bg-rose-50 text-rose-800 h-full"
+                className="border-rose-200 bg-rose-50 text-rose-800"
               />
+              
+              {!status.loggedIn && (
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Key size={16} className="text-indigo-600" />
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-700">Entrar com Código de Pareamento</h4>
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <input 
+                      type="text" 
+                      placeholder="Ex: 5586995206925"
+                      value={phoneNumber}
+                      onChange={e => setPhoneNumber(e.target.value)}
+                      className="flex-1 rounded-xl border-none bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5"
+                    />
+                    <button
+                      onClick={handlePair}
+                      disabled={qrLoading || !phoneNumber}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase transition-all hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {qrLoading && pairingCode ? <Loader2 className="animate-spin" size={14} /> : "Gerar Código"}
+                    </button>
+                  </div>
+                  
+                  {pairingCode && (
+                    <div className="mt-4 rounded-2xl bg-indigo-50 p-4 text-center">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Seu Código de 8 dígitos</p>
+                      <p className="text-2xl font-black tracking-[0.3em] text-indigo-600 my-1">{pairingCode}</p>
+                      <p className="text-[10px] font-medium text-indigo-400 leading-tight">No WhatsApp do seu celular, vá em: <br/> Aparelhos Conectados {'>'} Conectar com número de telefone.</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-lg flex flex-col items-center justify-center gap-4 text-center">
+            <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-xl flex flex-col items-center justify-center gap-6 text-center min-h-[350px]">
               {!status.connected ? (
-                <button
-                  onClick={handleConnect}
-                  disabled={qrLoading}
-                  className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 font-black tracking-widest text-white uppercase transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                >
-                  {qrLoading ? <Loader2 className="animate-spin" size={20} /> : <Smartphone size={20} />}
-                  Conectar Instância
-                </button>
-              ) : (
-                <>
-                  <div className="relative h-48 w-48 overflow-hidden rounded-2xl bg-slate-100 flex items-center justify-center border-4 border-slate-50">
-                    {qrLoading ? (
-                      <Loader2 className="animate-spin text-indigo-600" size={40} />
-                    ) : qrCode ? (
-                      <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain" />
-                    ) : (
-                      <p className="text-[10px] font-bold text-slate-400 uppercase p-4">QR Code não disponível</p>
-                    )}
+                <div className="space-y-4">
+                  <div className="mx-auto w-16 h-16 rounded-3xl bg-slate-50 flex items-center justify-center text-slate-300">
+                    <Smartphone size={32} />
                   </div>
                   <button
-                    onClick={handleFetchQR}
+                    onClick={handleConnect}
                     disabled={qrLoading}
-                    className="flex items-center gap-2 text-[10px] font-black tracking-widest text-indigo-600 uppercase hover:underline disabled:opacity-50"
+                    className="flex items-center gap-3 rounded-2xl bg-indigo-600 px-10 py-5 font-black tracking-widest text-white uppercase shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                   >
-                    <RefreshCw size={12} className={qrLoading ? 'animate-spin' : ''} />
-                    Atualizar QR Code
+                    {qrLoading ? <Loader2 className="animate-spin" size={20} /> : <Smartphone size={20} />}
+                    Conectar Instância
                   </button>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">Isso iniciará o processo de boot. <br/> Aguarde alguns segundos após clicar.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="relative h-56 w-56 overflow-hidden rounded-[2rem] bg-slate-50 flex items-center justify-center border-4 border-white shadow-inner">
+                    {qrLoading && !qrCode ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="animate-spin text-indigo-600" size={40} />
+                        <p className="text-[9px] font-black text-indigo-400 uppercase">Gerando QR...</p>
+                      </div>
+                    ) : qrCode ? (
+                      <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain p-2" />
+                    ) : (
+                      <div className="p-6">
+                        <XCircle size={32} className="mx-auto text-slate-200 mb-2" />
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">QR Code expirado ou indisponível</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleFetchQR}
+                      disabled={qrLoading}
+                      className="flex items-center justify-center gap-2 w-full text-[10px] font-black tracking-widest text-indigo-600 uppercase hover:underline disabled:opacity-50"
+                    >
+                      <RefreshCw size={12} className={qrLoading ? 'animate-spin' : ''} />
+                      Atualizar QR Code
+                    </button>
+                    <p className="text-[9px] font-medium text-slate-400 uppercase italic">Expira em 40 segundos</p>
+                  </div>
                 </>
               )}
             </div>
