@@ -171,6 +171,90 @@ export class EvolutionGoClient {
   }
 
   /**
+   * Gets the QR Code for the current instance.
+   */
+  public async getQRCode() {
+    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+    
+    const url = `${this.baseUrl}/instance/qr`;
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'apikey': this.apiKey,
+          'instance': this.instanceName
+        },
+        cache: 'no-store'
+      });
+
+      if (!response.ok) return { error: `HTTP Error ${response.status}` };
+      
+      const result = await response.json();
+      return { success: true, data: result.data }; // Base64 ou string do QR
+    } catch (error) {
+      return { error: String(error) };
+    }
+  }
+
+  /**
+   * Connects to the instance.
+   */
+  public async connectInstance(phone?: string, webhookUrl?: string) {
+    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+
+    const url = `${this.baseUrl}/instance/connect`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.apiKey,
+          'instance': this.instanceName
+        },
+        body: JSON.stringify({
+          immediate: true,
+          phone: phone || "",
+          webhookUrl: webhookUrl || "",
+          subscribe: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+        }),
+      });
+
+      const result = await response.json();
+      return { success: response.ok, data: result };
+    } catch (error) {
+      return { error: String(error) };
+    }
+  }
+
+  /**
+   * Requests a pairing code for the instance.
+   */
+  public async pairInstance(phone: string) {
+    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+
+    const url = `${this.baseUrl}/instance/pair`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': this.apiKey,
+          'instance': this.instanceName
+        },
+        body: JSON.stringify({
+          phone,
+          subscribe: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+        }),
+      });
+
+      const result = await response.json();
+      return { success: response.ok, data: result };
+    } catch (error) {
+      return { error: String(error) };
+    }
+  }
+
+  /**
    * Configures the webhook for the current instance.
    * Optimized for Evolution GO (Golang) v2 based on official docs.
    */

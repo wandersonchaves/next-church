@@ -1,9 +1,9 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle } from 'lucide-react';
+import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle, RefreshCw, Smartphone } from 'lucide-react';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction } from './actions';
+import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction, getQRCodeAction, connectInstanceAction } from './actions';
 import Link from 'next/link';
 import { useLocale } from 'next-intl';
 
@@ -18,7 +18,9 @@ export default function CommunicationPage() {
   const [recipientCount, setRecipientCount] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
-  const [status, setStatus] = React.useState<{ connected: boolean; name?: string } | null>(null);
+  const [status, setStatus] = React.useState<{ connected: boolean; loggedIn?: boolean; name?: string } | null>(null);
+  const [qrCode, setQrCode] = React.useState<string | null>(null);
+  const [qrLoading, setQrLoading] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -29,8 +31,14 @@ export default function CommunicationPage() {
       if (res.success && res.status) {
         setStatus({
           connected: res.status.connected,
+          loggedIn: res.status.loggedIn,
           name: res.status.name as string | undefined
         });
+
+        // Se estiver conectado mas não logado, tenta buscar o QR Code
+        if (res.status.connected && !res.status.loggedIn) {
+          handleFetchQR();
+        }
       }
     }
     fetchStatus();
@@ -38,6 +46,25 @@ export default function CommunicationPage() {
     const interval = setInterval(fetchStatus, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  async function handleFetchQR() {
+    setQrLoading(true);
+    const res = await getQRCodeAction();
+    if (res.success && res.data) {
+      setQrCode(res.data);
+    }
+    setQrLoading(false);
+  }
+
+  async function handleConnect() {
+    setQrLoading(true);
+    const res = await connectInstanceAction();
+    if (res.success) {
+      // Tenta buscar o QR novamente após conectar
+      setTimeout(handleFetchQR, 2000);
+    }
+    setQrLoading(false);
+  }
 
   // Busca estimativa de destinatários quando os filtros mudam
   React.useEffect(() => {
@@ -147,13 +174,53 @@ export default function CommunicationPage() {
           </div>
         </header>
 
-        {status && !status.connected && (
-          <Alert
-            type="warning"
-            title="Conexão Requerida"
-            message="Sua instância do WhatsApp está desconectada. Você precisa escanear o QR Code ou reconectar o dispositivo para que as mensagens automáticas e o envio em massa funcionem corretamente."
-            className="border-rose-200 bg-rose-50 text-rose-800"
-          />
+        {status && (!status.connected || !status.loggedIn) && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <Alert
+                type="warning"
+                title="Conexão Requerida"
+                message={!status.connected 
+                  ? "Sua instância do WhatsApp está desconectada do servidor Evolution. Clique em 'Conectar Instância' para iniciar."
+                  : "Sua instância está online, mas você precisa escanear o QR Code para realizar o login e habilitar o envio de mensagens."
+                }
+                className="border-rose-200 bg-rose-50 text-rose-800 h-full"
+              />
+            </div>
+            
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-lg flex flex-col items-center justify-center gap-4 text-center">
+              {!status.connected ? (
+                <button
+                  onClick={handleConnect}
+                  disabled={qrLoading}
+                  className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 font-black tracking-widest text-white uppercase transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                >
+                  {qrLoading ? <Loader2 className="animate-spin" size={20} /> : <Smartphone size={20} />}
+                  Conectar Instância
+                </button>
+              ) : (
+                <>
+                  <div className="relative h-48 w-48 overflow-hidden rounded-2xl bg-slate-100 flex items-center justify-center border-4 border-slate-50">
+                    {qrLoading ? (
+                      <Loader2 className="animate-spin text-indigo-600" size={40} />
+                    ) : qrCode ? (
+                      <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain" />
+                    ) : (
+                      <p className="text-[10px] font-bold text-slate-400 uppercase p-4">QR Code não disponível</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleFetchQR}
+                    disabled={qrLoading}
+                    className="flex items-center gap-2 text-[10px] font-black tracking-widest text-indigo-600 uppercase hover:underline disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={qrLoading ? 'animate-spin' : ''} />
+                    Atualizar QR Code
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         )}
 
         {/* CONTÊINER PRINCIPAL COM FLEX WRAP (Fase 4) */}

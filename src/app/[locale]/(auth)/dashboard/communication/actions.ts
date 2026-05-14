@@ -89,7 +89,7 @@ export async function syncWebhookAction() {
 
   try {
     const client = EvolutionGoClient.getInstance();
-    
+
     // Constrói a URL do Webhook
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.up.railway.app';
     const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
@@ -100,7 +100,7 @@ export async function syncWebhookAction() {
     // vamos registrar o vínculo no nosso banco, pois os logs mostram que o webhook já está ativo.
     const { NotificationService } = await import('@/libs/services/NotificationService');
     const identifier = process.env.EVOLUTION_INSTANCE || 'test-dsv-02';
-    
+
     await NotificationService.logConnectionState(identifier, 'CONNECTED_AND_SYNCED_MANUAL', orgId);
     console.info(`[SYNC_WEBHOOK_INTERNAL] Mapping created: Instance ${identifier} -> Org ${orgId}`);
 
@@ -108,26 +108,61 @@ export async function syncWebhookAction() {
       return { success: true };
     } else {
       // Se deu 404 mas o vínculo interno foi criado, retornamos sucesso com aviso
-      return { 
-        success: true, 
-        message: 'Vínculo interno atualizado. As mensagens devem aparecer agora.' 
+      return {
+        success: true,
+        message: 'Vínculo interno atualizado. As mensagens devem aparecer agora.'
       };
     }
   } catch (error) {
-  console.error('[SYNC_WEBHOOK_ERROR]', error);
-  return { error: 'Erro interno ao sincronizar' };
+    console.error('[SYNC_WEBHOOK_ERROR]', error);
+    return { error: 'Erro interno ao sincronizar' };
   }
-  }
+}
 
-  /**
-  * Busca o status da instância do WhatsApp
-  */
-  export async function getWhatsAppStatusAction() {
+/**
+* Busca o status da instância do WhatsApp
+*/
+export async function getWhatsAppStatusAction() {
   try {
-  const client = EvolutionGoClient.getInstance();
-  const status = await client.getInstanceStatus();
-  return { success: true, status };
+    const client = EvolutionGoClient.getInstance();
+    const status = await client.getInstanceStatus();
+    return { success: true, status };
   } catch (error) {
-  return { success: false, error: 'Falha ao buscar status' };
+    return { success: false, error: 'Falha ao buscar status' };
   }
+}
+
+export async function getQRCodeAction() {
+  try {
+    const client = EvolutionGoClient.getInstance();
+    const res = await client.getQRCode();
+    return res;
+  } catch (error) {
+    return { error: 'Falha ao gerar QR Code' };
   }
+}
+
+export async function connectInstanceAction(phone?: string) {
+  try {
+    const client = EvolutionGoClient.getInstance();
+    
+    // Constrói a URL do Webhook para garantir sincronia no login
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.up.railway.app';
+    const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
+
+    const res = await client.connectInstance(phone, webhookUrl);
+    return res;
+  } catch (error) {
+    return { error: 'Falha ao conectar instância' };
+  }
+}
+
+export async function pairInstanceAction(phone: string) {
+  try {
+    const client = EvolutionGoClient.getInstance();
+    const res = await client.pairInstance(phone);
+    return res;
+  } catch (error) {
+    return { error: 'Falha ao solicitar código de pareamento' };
+  }
+}
