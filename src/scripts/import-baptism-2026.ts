@@ -80,7 +80,7 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
     console.log(`📝 Criado arquivo de exemplo: ${filePath}`);
   }
 
-  console.log('🚀 Iniciando Processamento de membros do Batismo 2026...');
+  console.log('🚀 Iniciando Processamento de Batismo 2026...');
 
   const fileContent = fs.readFileSync(filePath, 'utf-8');
 
