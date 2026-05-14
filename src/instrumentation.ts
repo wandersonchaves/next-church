@@ -43,7 +43,10 @@ export async function register() {
       const { inngest } = await import('@/libs/Inngest');
       await inngest.send({ 
         name: 'system/connection.check', 
-        data: { reason: 'deployment_boot' } 
+        data: { 
+          reason: 'deployment_boot',
+          timestamp: new Date().toISOString()
+        } 
       });
       console.log('🚀 [BOOT] Verificação de conexão WhatsApp disparada com sucesso.');
     } catch (error) {
