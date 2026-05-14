@@ -15,9 +15,9 @@ const baseConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   generateBuildId: async () => {
-    // Usar um ID estático garante que as Server Actions sejam encontradas
-    // mesmo durante o período de transição entre deploys no Railway.
-    return 'next-church-stable';
+    // Usar o SHA do commit ou um timestamp garante que o Next.js 
+    // sempre use o manifesto de funções correto após o deploy.
+    return process.env.RAILWAY_GIT_COMMIT_SHA || `production-${new Date().getTime()}`;
   },
   reactCompiler: process.env.NODE_ENV === 'production',
   outputFileTracingIncludes: {

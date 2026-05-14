@@ -143,16 +143,20 @@ export async function getQRCodeAction() {
 }
 
 export async function connectInstanceAction(phone?: string) {
+  console.log(`🔌 [CONNECT_ACTION] Iniciando conexão para instância...`);
   try {
     const client = EvolutionGoClient.getInstance();
     
-    // Constrói a URL do Webhook para garantir sincronia no login
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.up.railway.app';
     const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
 
+    console.log(`🔌 [CONNECT_ACTION] Webhook URL: ${webhookUrl}`);
     const res = await client.connectInstance(phone, webhookUrl);
+    
+    console.log(`🔌 [CONNECT_ACTION] Resultado:`, JSON.stringify(res));
     return res;
   } catch (error) {
+    console.error(`🔌 [CONNECT_ACTION_ERROR]`, error);
     return { error: 'Falha ao conectar instância' };
   }
 }
