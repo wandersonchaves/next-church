@@ -36,6 +36,30 @@ export const watchdogWhatsAppConnection = inngest.createFunction(
     });
 
     if (!status.connected || !(status as any).loggedIn) {
+      // 🛡️ TRAVA DE SEGURANÇA: Só alerta se o último registro for há mais de 2h50m
+      const shouldAlert = await step.run("check-cooldown", async () => {
+        const lastAlert = await db
+          .select({ createdAt: sql`max(created_at)` })
+          .from(sql`audit_logs`)
+          .where(and(
+            eq(sql`entity_id`, Env.EVOLUTION_INSTANCE || 'unknown'),
+            eq(sql`action`, 'DISCONNECTED_WATCHDOG')
+          ));
+        
+        if (lastAlert[0]?.createdAt) {
+          const lastTime = new Date(lastAlert[0].createdAt as string).getTime();
+          const now = new Date().getTime();
+          const hoursPassed = (now - lastTime) / (1000 * 60 * 60);
+          return hoursPassed >= 2.8; // ~2h48m
+        }
+        return true;
+      });
+
+      if (!shouldAlert) {
+        console.log("⏳ [WATCHDOG] Alerta ignorado devido ao Cooldown (menos de 3 horas desde o último).");
+        return { status: 'cooldown_active' };
+      }
+
       console.warn("⚠️ [WATCHDOG] Instância indisponível ou deslogada! Iniciando procedimentos de alerta...");
 
       await step.run("log-disconnection", async () => {
