@@ -16,8 +16,8 @@ import { EvolutionGoClient } from '@/libs/evolution-go/client';
  * Também disparado no boot do sistema.
  */
 export const watchdogWhatsAppConnection = inngest.createFunction(
-  {
-    id: "watchdog-whatsapp-connection",
+  { 
+    id: "watchdog-whatsapp-connection", 
     name: "Monitor de Conexão WhatsApp",
     triggers: [
       { cron: "0 */3 * * *" },
