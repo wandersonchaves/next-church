@@ -5,15 +5,18 @@ import { z } from 'zod';
 import { inngest } from '@/libs/Inngest';
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
 import { db } from '@/libs/DB';
-import { members } from '@/models/Schema';
+import { members, literacyStudents } from '@/models/Schema';
 import { eq, and, isNull, count } from 'drizzle-orm';
 
 const BroadcastSchema = z.object({
   message: z.string().min(5, 'A mensagem deve ter pelo menos 5 caracteres'),
   filters: z.object({
+    targetAudience: z.enum(['MEMBERS', 'LITERACY']).default('MEMBERS'),
     currentStep: z.string().optional().nullable().or(z.literal('')),
     generationSlot: z.string().optional().nullable().or(z.literal('')),
     tag: z.string().optional().nullable().or(z.literal('')),
+    literacyShift: z.string().optional().nullable().or(z.literal('')),
+    literacyStatus: z.string().optional().nullable().or(z.literal('')),
   }),
 });
 
@@ -22,6 +25,27 @@ export async function getRecipientCountAction(filters: z.infer<typeof BroadcastS
   if (!orgId) return { error: 'Não autorizado' };
 
   try {
+    if (filters.targetAudience === 'LITERACY') {
+      const conditions = [
+        eq(literacyStudents.organizationId, orgId),
+      ];
+
+      if (filters.literacyShift) {
+        conditions.push(eq(literacyStudents.preferredShift, filters.literacyShift as any));
+      }
+
+      if (filters.literacyStatus) {
+        conditions.push(eq(literacyStudents.status, filters.literacyStatus as any));
+      }
+
+      const [result] = await db
+        .select({ total: count() })
+        .from(literacyStudents)
+        .where(and(...conditions));
+
+      return { success: true, count: result?.total || 0 };
+    }
+
     const conditions = [
       eq(members.organizationId, orgId),
       isNull(members.deletedAt)

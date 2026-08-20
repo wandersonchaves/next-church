@@ -1,5 +1,5 @@
 import { db } from '@/libs/DB';
-import { members, notificationLogs } from '@/models/Schema';
+import { members, notificationLogs, literacyStudents } from '@/models/Schema';
 import { eq, and, isNull, sql, gte } from 'drizzle-orm';
 import { inngest } from '@/libs/Inngest';
 import { WhatsAppService } from './WhatsAppService';
@@ -304,6 +304,27 @@ export const sendBroadcast = inngest.createFunction(
     const { organizationId, filters, message } = event.data;
 
     const recipients = await step.run('fetch-recipients', async () => {
+      if (filters.targetAudience === 'LITERACY') {
+        const conditions = [
+          eq(literacyStudents.organizationId, organizationId),
+        ];
+
+        if (filters.literacyShift) {
+          conditions.push(eq(literacyStudents.preferredShift, filters.literacyShift));
+        }
+
+        if (filters.literacyStatus) {
+          conditions.push(eq(literacyStudents.status, filters.literacyStatus));
+        }
+
+        const students = await db.select().from(literacyStudents).where(and(...conditions));
+        return students.map(s => ({
+          id: s.id,
+          firstName: s.studentName.split(' ')[0] || s.studentName,
+          phone: s.guardianPhone,
+        }));
+      }
+
       const conditions = [
         eq(members.organizationId, organizationId),
         isNull(members.deletedAt),

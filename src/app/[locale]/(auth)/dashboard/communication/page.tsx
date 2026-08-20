@@ -12,9 +12,12 @@ const SAFETY_LIMIT = 100;
 export default function CommunicationPage() {
   const locale = useLocale();
   const [message, setMessage] = React.useState('');
+  const [targetAudience, setTargetAudience] = React.useState<'MEMBERS' | 'LITERACY'>('MEMBERS');
   const [step, setStep] = React.useState('');
   const [generation, setGeneration] = React.useState('');
   const [tag, setTag] = React.useState('');
+  const [literacyShift, setLiteracyShift] = React.useState('');
+  const [literacyStatus, setLiteracyStatus] = React.useState('');
   const [recipientCount, setRecipientCount] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
@@ -117,16 +120,19 @@ export default function CommunicationPage() {
   React.useEffect(() => {
     async function updateCount() {
       const res = await getRecipientCountAction({
+        targetAudience,
         currentStep: step || null,
         generationSlot: generation || null,
         tag: tag || null,
+        literacyShift: literacyShift || null,
+        literacyStatus: literacyStatus || null,
       });
       if (res.success) {
         setRecipientCount(res.count);
       }
     }
     updateCount();
-  }, [step, generation, tag]);
+  }, [targetAudience, step, generation, tag, literacyShift, literacyStatus]);
 
   async function handleSync() {
     setSyncing(true);
@@ -150,9 +156,12 @@ export default function CommunicationPage() {
     const res = await sendBroadcastAction({
       message,
       filters: {
+        targetAudience,
         currentStep: step || null,
         generationSlot: generation || null,
         tag: tag || null,
+        literacyShift: literacyShift || null,
+        literacyStatus: literacyStatus || null,
       },
     });
 
@@ -403,35 +412,91 @@ export default function CommunicationPage() {
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label htmlFor="journeyStep" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Etapa da Jornada</label>
-                  <select value={step} onChange={e => setStep(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                    <option value="">Toda a Igreja</option>
-                    {['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'].map(s => (
-                      <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                    ))}
-                  </select>
+                  <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Público-Alvo / Lista</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTargetAudience('MEMBERS')}
+                      className={`py-3 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                        targetAudience === 'MEMBERS'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      👥 Membros G12
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTargetAudience('LITERACY')}
+                      className={`py-3 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                        targetAudience === 'LITERACY'
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      📚 Alfabetização
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="leaderGeneration" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Geração do Líder</label>
-                  <select value={generation} onChange={e => setGeneration(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                    <option value="">Todas as Linhagens</option>
-                    {Array.from({ length: 13 }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>
-                        F
-                        {i + 1}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {targetAudience === 'MEMBERS' ? (
+                  <>
+                    <div className="space-y-2">
+                      <label htmlFor="journeyStep" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Etapa da Jornada</label>
+                      <select value={step} onChange={e => setStep(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                        <option value="">Toda a Igreja</option>
+                        {['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'].map(s => (
+                          <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="tagFilter" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Tag / Evento</label>
-                  <select value={tag} onChange={e => setTag(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                    <option value="">Nenhuma Tag</option>
-                    <option value="BATISMO_2026">Batismo 2026</option>
-                  </select>
-                </div>
+                    <div className="space-y-2">
+                      <label htmlFor="leaderGeneration" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Geração do Líder</label>
+                      <select value={generation} onChange={e => setGeneration(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                        <option value="">Todas as Linhagens</option>
+                        {Array.from({ length: 13 }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            F
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label htmlFor="tagFilter" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Tag / Evento</label>
+                      <select value={tag} onChange={e => setTag(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                        <option value="">Nenhuma Tag</option>
+                        <option value="BATISMO_2026">Batismo 2026</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Turno de Estudo</label>
+                      <select value={literacyShift} onChange={e => setLiteracyShift(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                        <option value="">Todos os Turnos</option>
+                        <option value="MANHA">☀️ Manhã</option>
+                        <option value="TARDE">🌤️ Tarde</option>
+                        <option value="NOITE">🌙 Noite</option>
+                        <option value="SABADO">📅 Sábado</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Status do Aluno</label>
+                      <select value={literacyStatus} onChange={e => setLiteracyStatus(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                        <option value="">Todos os Status</option>
+                        <option value="INSCRITO">Inscritos (Pendentes)</option>
+                        <option value="CONFIRMADO">Confirmados</option>
+                        <option value="TURMA_FORMADA">Em Turma</option>
+                        <option value="DESISTENTE">Desistentes</option>
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Dica de Throttling integrada ao fluxo (Fase 4) */}
