@@ -4,7 +4,7 @@ import { auditLogs } from '@/models/Schema';
 import { and, desc, eq, gte } from 'drizzle-orm';
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PROMOTE';
-export type AuditEntityType = 'MEMBER' | 'MINISTRY' | 'TEAM';
+export type AuditEntityType = 'MEMBER' | 'MINISTRY' | 'TEAM' | 'LITERACY';
 
 /**
  * Busca o resumo de atividades da última semana.

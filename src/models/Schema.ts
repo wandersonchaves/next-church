@@ -18,6 +18,30 @@ export const genderEnum = pgEnum('gender', ['M', 'F']);
 
 export const memberStatusEnum = pgEnum('member_status', ['ACTIVE', 'AWAITING_UPDATE', 'UPDATED']);
 
+export const literacyShiftEnum = pgEnum('literacy_shift', [
+  'MANHA',
+  'TARDE',
+  'NOITE',
+  'SABADO',
+]);
+
+export const literacyStatusEnum = pgEnum('literacy_status', [
+  'INSCRITO',
+  'CONFIRMADO',
+  'TURMA_FORMADA',
+  'DESISTENTE',
+]);
+
+export const literacyEducationEnum = pgEnum('literacy_education', [
+  'NUNCA_ESTUDOU',
+  'ALFABETIZANDO_INICIAL',
+  'FUNDAMENTAL_INCOMPLETO',
+  'FUNDAMENTAL_COMPLETO',
+  'MEDIO_INCOMPLETO',
+  'MEDIO_COMPLETO',
+  'OUTRO',
+]);
+
 /**
  * Tabelas do Sistema
  */
@@ -125,6 +149,39 @@ export const auditLogs = pgTable('audit_logs', {
 }, (table) => [
   index('audit_org_idx').on(table.organizationId),
   index('audit_created_idx').on(table.createdAt),
+]);
+
+// 8. Alfabetização (Inscrições e Formação de Turmas)
+export const literacyStudents = pgTable('literacy_students', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: varchar('organization_id', { length: 255 }).notNull(),
+  studentName: text('student_name').notNull(),
+  guardianName: text('guardian_name'),
+  guardianPhone: text('guardian_phone').notNull(),
+  address: text('address').notNull(),
+  neighborhood: text('neighborhood'),
+  city: text('city').default('Teresina'),
+  age: integer('age').notNull(),
+  birthDate: timestamp('birth_date', { mode: 'date' }),
+  gender: genderEnum('gender').notNull(),
+  educationLevel: literacyEducationEnum('education_level').default('NUNCA_ESTUDOU').notNull(),
+  preferredShift: literacyShiftEnum('preferred_shift').default('NOITE').notNull(),
+  hasSpecialNeeds: boolean('has_special_needs').default(false).notNull(),
+  specialNeedsDetails: text('special_needs_details'),
+  registeredBy: text('registered_by'),
+  status: literacyStatusEnum('status').default('INSCRITO').notNull(),
+  assignedClass: text('assigned_class'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (table) => [
+  index('literacy_org_idx').on(table.organizationId),
+  index('literacy_status_idx').on(table.status),
+  index('literacy_shift_idx').on(table.preferredShift),
+  index('literacy_created_idx').on(table.createdAt),
 ]);
 
 /**
