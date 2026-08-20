@@ -11,7 +11,8 @@ import {
   X,
   Bell,
   Search,
-  ChevronDown
+  ChevronDown,
+  GraduationCap,
 } from 'lucide-react';
 import { Link, usePathname } from '@/libs/I18nNavigation';
 import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
@@ -23,6 +24,7 @@ export const GlobalHeader = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Alfabetização', href: '/dashboard/alfabetizacao', icon: GraduationCap },
     { name: 'Ministérios', href: '/dashboard/ministries', icon: Briefcase },
     { name: 'Equipe', href: '/dashboard/team', icon: Users },
     { name: 'Registros', href: '/dashboard/activity', icon: HistoryIcon },
