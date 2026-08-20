@@ -140,7 +140,7 @@ export default function CommunicationPage() {
   }
 
   async function handleSend() {
-    if (!message) {
+    if (!message || loading) {
       return;
     }
     setLoading(true);

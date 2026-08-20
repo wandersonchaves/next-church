@@ -1,7 +1,7 @@
 
 import { db } from '@/libs/DB';
 import { members, notificationLogs, auditLogs } from '@/models/Schema';
-import { eq, sql, and, or, ilike, isNull } from 'drizzle-orm';
+import { eq, sql, and, or, ilike, isNull, gte } from 'drizzle-orm';
 import { Env } from '@/libs/Env';
 
 export const NotificationService = {
@@ -35,7 +35,42 @@ export const NotificationService = {
         ))
         .limit(1);
       
-      const member = results[0] || null;
+      let member = results[0] || null;
+
+      // Fallback: se o número no banco foi zerado anteriormente (phone = null), busca pelo log recente para restaurar o membro
+      if (!member) {
+        const lastLog = await db
+          .select({ memberId: notificationLogs.memberId })
+          .from(notificationLogs)
+          .where(and(
+            ilike(notificationLogs.content, `%${suffix8}%`),
+            sql`${notificationLogs.memberId} IS NOT NULL`
+          ))
+          .orderBy(sql`${notificationLogs.sentAt} DESC`)
+          .limit(1);
+
+        if (lastLog[0]?.memberId) {
+          const [healedMember] = await db
+            .select()
+            .from(members)
+            .where(and(
+              eq(members.id, lastLog[0].memberId),
+              isNull(members.deletedAt)
+            ))
+            .limit(1);
+
+          if (healedMember) {
+            member = healedMember;
+            console.log(`[NOTIFICATION_SERVICE] Restoring phone for member ${member.firstName} (${digits})`);
+            await db
+              .update(members)
+              .set({ phone: digits, updatedAt: new Date() })
+              .where(eq(members.id, member.id));
+            member.phone = digits;
+          }
+        }
+      }
+
       console.log(`[NOTIFICATION_SERVICE] Lookup Result: ${member ? `${member.firstName} (Org: ${member.organizationId})` : 'NOT FOUND'}`);
       
       return member;
@@ -93,9 +128,9 @@ export const NotificationService = {
 
       console.log(`[NOTIFICATION_SERVICE] >>> STEP 2: Final Org=${orgId}. Inserting...`);
 
-      // 🛑 TRAVA DE DUPLICIDADE: Verifica se a mensagem já existe pelo externalId
+      // 🛑 TRAVA DE DUPLICIDADE: Verifica se a mensagem já existe pelo externalId ou nos últimos 10 segundos
       const extId = data.externalId && String(data.externalId).trim() !== '' ? String(data.externalId) : null;
-      
+
       if (extId) {
         const existing = await db.query.notificationLogs.findFirst({
           where: and(
@@ -108,6 +143,21 @@ export const NotificationService = {
           console.log(`[NOTIFICATION_SERVICE] >>> SKIP: Message ${extId} already exists. Ignoring duplicate.`);
           return;
         }
+      }
+
+      const recentWindow = new Date(Date.now() - 10 * 1000);
+      const recentDuplicate = await db.query.notificationLogs.findFirst({
+        where: and(
+          eq(notificationLogs.organizationId, String(orgId)),
+          eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
+          member?.id ? eq(notificationLogs.memberId, member.id) : ilike(notificationLogs.content, `[De: ${sender.split('@')[0]}]%`),
+          gte(notificationLogs.sentAt, recentWindow)
+        ),
+      });
+
+      if (recentDuplicate) {
+        console.log(`[NOTIFICATION_SERVICE] >>> SKIP: Duplicate incoming message from ${sender} within last 10s.`);
+        return;
       }
 
       const parentId = data.parentExternalId && String(data.parentExternalId).trim() !== '' ? String(data.parentExternalId) : null;

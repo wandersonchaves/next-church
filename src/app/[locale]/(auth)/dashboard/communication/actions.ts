@@ -170,3 +170,50 @@ export async function pairInstanceAction(phone: string) {
     return { error: 'Falha ao solicitar código de pareamento' };
   }
 }
+
+/**
+ * Diagnostic action to test Evolution API reachability and latency.
+ */
+export async function testEvolutionHealthAction() {
+  const { orgId } = await auth();
+  if (!orgId) return { error: 'Não autorizado' };
+
+  try {
+    const client = EvolutionGoClient.getInstance();
+    const health = await client.pingHealth();
+    const status = await client.getInstanceStatus();
+    return {
+      success: health.reachable,
+      health,
+      status,
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Sends a single test WhatsApp message with full diagnostic output.
+ */
+export async function testWhatsAppMessageAction(params: { phone: string; message?: string }) {
+  const { orgId } = await auth();
+  if (!orgId) return { error: 'Não autorizado' };
+
+  try {
+    const client = EvolutionGoClient.getInstance();
+    const testText = params.message || `🔔 Teste de Conexão NextChurch (${new Date().toLocaleTimeString('pt-BR')})`;
+    const result = await client.sendMessage(params.phone, testText, orgId);
+
+    return {
+      success: result.sent,
+      externalId: result.externalId,
+      endpoint: result.endpoint,
+      latencyMs: result.latencyMs,
+      error: result.error || (result.sent ? undefined : 'Falha desconhecida no envio'),
+    };
+  } catch (error) {
+    console.error('[TEST_WHATSAPP_ACTION_ERROR]', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
