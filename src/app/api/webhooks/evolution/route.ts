@@ -7,8 +7,8 @@ import { revalidatePath } from 'next/cache';
 export const dynamic = 'force-dynamic';
 
 /**
- * Evolution GO v2 Webhook Handler
- * Optimized for performance: Validates and hands off to Inngest immediately.
+ * Evolution GO / Evolution API Webhook Handler
+ * Optimized for performance: Validates, saves directly, and hands off to Inngest for AI processing.
  */
 export async function POST(req: Request) {
   try {
@@ -19,65 +19,103 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
-    // Evolution GO (Golang) uses short names like MESSAGE, CONNECTION
-    const incomingEvent = (event || '').toUpperCase();
+    const rawEvent = String(event || '');
+    const incomingEvent = rawEvent.toUpperCase();
+    const normalizedEvent = incomingEvent.replace(/[._]/g, '');
 
-    // Early Filter: Ignore events we don't care about or that are too noisy
-    const sender = data?.Info?.Sender || data?.key?.remoteJid || '';
+    // Smart sender resolution: resolve @lid to actual phone JID
+    const messageData = data?.data || data;
+    const rawSender = messageData?.Info?.Sender || messageData?.Info?.Chat || messageData?.key?.remoteJid || messageData?.sender || '';
+    let sender = messageData?.Info?.Chat || rawSender;
+
+    if (sender.includes('@lid') || !sender) {
+      if (messageData?.Info?.Chat && !messageData.Info.Chat.includes('@lid')) {
+        sender = messageData.Info.Chat;
+      } else if (messageData?.Info?.SenderAlt && !messageData.Info.SenderAlt.includes('@lid')) {
+        sender = messageData.Info.SenderAlt;
+      } else if (messageData?.Info?.Sender && !messageData.Info.Sender.includes('@lid')) {
+        sender = messageData.Info.Sender;
+      } else if (rawSender && !rawSender.includes('@lid')) {
+        sender = rawSender;
+      }
+    }
+
     if (sender.includes('@newsletter') || sender.includes('@status')) {
       return NextResponse.json({ status: 'ignored_source', event: incomingEvent });
     }
 
-    const supportedEvents = [
-      'MESSAGE', 
-      'MESSAGES.UPSERT', 
-      'CONNECTION', 
-      'CONNECTION_UPDATE',
-      'CONNECTED',
-      'QRCODE',
-      'LOGOUT', 
-      'DISCONNECTED'
-    ];
+    const isMessageEvent = normalizedEvent.includes('MESSAGE') || normalizedEvent.includes('UPSERT');
+    const isConnectionEvent = normalizedEvent.includes('CONNECTION') || normalizedEvent.includes('CONNECTED') || normalizedEvent.includes('DISCONNECT') || normalizedEvent.includes('LOGOUT');
+    const isQrEvent = normalizedEvent.includes('QR');
 
-    if (!supportedEvents.includes(incomingEvent)) {
+    if (!isMessageEvent && !isConnectionEvent && !isQrEvent) {
+      console.info(`[EVOLUTION_WEBHOOK] Ignored unsupported event: ${incomingEvent}`);
       return NextResponse.json({ status: 'ignored', event: incomingEvent });
     }
 
-    console.info(`[EVOLUTION_GO_WEBHOOK] Event: ${incomingEvent} from ${sender}`);
+    const isFromMe = Boolean(
+      messageData?.key?.fromMe ??
+      messageData?.Info?.IsFromMe ??
+      messageData?.fromMe ??
+      false
+    );
+
+    const isGroup = Boolean(
+      messageData?.Info?.IsGroup ||
+      sender.includes('@g.us') ||
+      messageData?.key?.remoteJid?.includes('@g.us')
+    );
+
+    console.info(`[EVOLUTION_WEBHOOK] Event: ${incomingEvent} | Sender: ${sender} | FromMe: ${isFromMe} | Group: ${isGroup}`);
 
     // Smart Sanitization
     const sanitizedData = {
       event: body.event,
-      instanceId: body.instanceId,
-      instanceName: body.instanceName,
-      data: body.data
+      instanceId: body.instanceId || body.instance,
+      instanceName: body.instanceName || body.instance,
+      data: body.data,
     };
 
-    // 🚀 SALVAMENTO DIRETO (ALTA PERFORMANCE)
-    // Se for uma mensagem, salvamos imediatamente para garantir que o Inbox atualize rápido
-    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(incomingEvent)) {
-      const messageData = body.data;
+    // 🚀 PROCESSAMENTO DE MENSAGENS RECEBIDAS
+    if (isMessageEvent && !isGroup && !isFromMe) {
       const msg = messageData?.message || messageData?.Message;
 
-      const content = msg?.conversation || 
+      const content = msg?.conversation ||
                       msg?.extendedTextMessage?.text ||
                       msg?.imageMessage?.caption ||
                       msg?.videoMessage?.caption ||
-                      messageData?.content;
+                      (typeof msg === 'string' ? msg : undefined) ||
+                      messageData?.content ||
+                      messageData?.text ||
+                      messageData?.Message;
 
       const externalId = messageData?.key?.id || messageData?.Info?.ID;
       const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
       const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
 
       if (content && sender) {
+        console.info(`[EVOLUTION_WEBHOOK] Incoming user message from ${sender}: "${String(content).slice(0, 100)}"`);
+
         await NotificationService.saveIncomingMessage({
           sender: String(sender),
           content: String(content),
-          instanceId: String(body.instanceId || ''),
-          instanceName: String(body.instanceName || ''),
+          instanceId: String(body.instanceId || body.instance || ''),
+          instanceName: String(body.instanceName || body.instance || ''),
           externalId: String(externalId || ''),
           parentExternalId: String(parentExternalId || ''),
         }).catch(e => console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e));
+
+        // Envia o evento para processamento de IA/Debounce
+        console.info(`[EVOLUTION_WEBHOOK] Dispatching whatsapp/message.received for AI analysis to Inngest...`);
+        await inngest.send({
+          name: 'whatsapp/message.received',
+          data: {
+            sender: String(sender),
+            content: String(content),
+            instanceId: String(body.instanceId || body.instance || ''),
+            instanceName: String(body.instanceName || body.instance || ''),
+          },
+        }).catch(e => console.error('[WEBHOOK_MESSAGE_RECEIVED_DISPATCH_ERROR]', e));
 
         // Limpa o cache da página de Inbox em todos os idiomas
         revalidatePath('/[locale]/dashboard/communication/inbox', 'page');
@@ -90,17 +128,17 @@ export async function POST(req: Request) {
         name: 'whatsapp/webhook.received',
         data: {
           ...sanitizedData,
-          normalizedEvent: incomingEvent 
+          normalizedEvent: incomingEvent,
         },
       });
     } catch (inngestError) {
-      console.error(`[EVOLUTION_GO_WEBHOOK] Inngest Dispatch Failed:`, inngestError);
+      console.error(`[EVOLUTION_WEBHOOK] Inngest Dispatch Failed:`, inngestError);
     }
 
-    // Respond immediately with 200 OK as per best practices
     return NextResponse.json({ success: true, processed: 'direct+async' });
   } catch (error) {
-    console.error('[EVOLUTION_GO_WEBHOOK_CRITICAL_ERROR]', error);
+    console.error('[EVOLUTION_WEBHOOK_CRITICAL_ERROR]', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+

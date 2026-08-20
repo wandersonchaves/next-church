@@ -1,6 +1,6 @@
 import { db } from '@/libs/DB';
-import { members } from '@/models/Schema';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { members, notificationLogs } from '@/models/Schema';
+import { eq, and, isNull, sql, gte } from 'drizzle-orm';
 import { inngest } from '@/libs/Inngest';
 import { WhatsAppService } from './WhatsAppService';
 import { getWeeklySummary } from './AuditService';
@@ -9,6 +9,7 @@ import { AppConfig } from '@/utils/AppConfig';
 import { NotificationService } from './NotificationService';
 import { Env } from '@/libs/Env';
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
+import { handleIncomingMessageUseCase } from '@/libs/services/HandleIncomingMessageUseCase';
 
 /**
  * Monitor de Conexão WhatsApp.
@@ -305,7 +306,7 @@ export const sendBroadcast = inngest.createFunction(
     const recipients = await step.run('fetch-recipients', async () => {
       const conditions = [
         eq(members.organizationId, organizationId),
-        isNull(members.deletedAt)
+        isNull(members.deletedAt),
       ];
 
       if (filters.currentStep) {
@@ -329,21 +330,41 @@ export const sendBroadcast = inngest.createFunction(
         count++;
         const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
 
+        // 🛡️ Trava de envio duplicado: se já enviou mensagem nos últimos 3 minutos, pula
+        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+        const alreadySent = await step.run(`check-dup-${member.id}`, async () => {
+          const recentLog = await db.query.notificationLogs.findFirst({
+            where: and(
+              eq(notificationLogs.organizationId, organizationId),
+              eq(notificationLogs.memberId, member.id),
+              eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+              eq(notificationLogs.status, 'SENT'),
+              gte(notificationLogs.sentAt, threeMinutesAgo)
+            ),
+          });
+          return Boolean(recentLog);
+        });
+
+        if (alreadySent) {
+          console.info(`[BROADCAST_SKIP] Message already sent to ${member.firstName} (${member.phone}) in the last 3 minutes. Skipping duplicate.`);
+          continue;
+        }
+
         await step.run(`send-${member.id}`, async () => {
-          const result: any = await WhatsAppService.sendMessage({
+          console.info(`[BROADCAST] Sending message ${count}/${recipients.length} to ${member.firstName} (${member.phone})`);
+          const result = await WhatsAppService.sendMessage({
             phone: member.phone!,
             message: personalizedMessage,
-            organizationId: organizationId
+            organizationId,
           });
-          const msgId = result?.key?.id || result?.data?.key?.id || result?.data?.id;
 
-          await NotificationService.saveOutgoingMessage({
-            phone: member.phone!,
-            content: personalizedMessage,
-            organizationId: organizationId,
-            status: msgId ? 'SENT' : 'FAILED',
-            externalId: msgId,
-          });
+          if (!result.sent) {
+            console.warn(`[BROADCAST_WARN] Failed to send message to ${member.firstName}: ${result.error || result.reason}`);
+          } else {
+            console.info(`[BROADCAST_OK] Dispatched message to ${member.firstName} (ID: ${result.externalId || 'N/A'})`);
+          }
+
+          return result;
         });
 
         if (count % 30 === 0) {
@@ -380,37 +401,6 @@ export const onWhatsAppWebhook = inngest.createFunction(
       return { status: 'ignored_unauthorized_instance' };
     }
 
-    if (['MESSAGE', 'MESSAGES.UPSERT'].includes(normalizedEvent)) {
-      const messageData = normalizedEvent === 'MESSAGES.UPSERT' ? payload.data?.data : (payload.data || payload);
-      if (!messageData) return { status: 'no_data' };
-
-      const senderJid = messageData.key?.remoteJid ?? messageData.sender ?? messageData.Info?.Sender;
-      const isFromMe = messageData.key?.fromMe ?? messageData.Info?.IsFromMe;
-      let sender = senderJid;
-      const chat = messageData.Info?.Chat || sender;
-
-      if (sender && !sender.includes('@') && sender.endsWith('.net')) {
-        sender = sender.replace('s.whatsapp.net', '@s.whatsapp.net');
-      }
-
-      const isGroup = messageData.Info?.IsGroup || sender?.includes('@g.us') || chat?.includes('@g.us');
-      if (isGroup || isFromMe) return { status: 'ignored' };
-
-      let content = messageData.message?.conversation || messageData.content || messageData.text;
-      if (!content) content = "[Mídia]";
-
-      if (sender && content) {
-        await step.run('save-incoming-message', async () => {
-          await NotificationService.saveIncomingMessage({
-            sender,
-            content: String(content),
-            instanceId: String(instanceId),
-            instanceName: String(instanceName),
-          });
-        });
-      }
-    }
-
     if (['CONNECTION', 'CONNECTED', 'LOGOUT', 'DISCONNECTED'].includes(normalizedEvent)) {
       await step.run('log-connection-state', async () => {
         const isConnected = ['CONNECTED', 'CONNECTION'].includes(normalizedEvent) || payload.data?.state === 'open';
@@ -421,4 +411,62 @@ export const onWhatsAppWebhook = inngest.createFunction(
 
     return { status: 'processed' };
   },
+);
+
+/**
+ * Inngest Function: Processa mensagem recebida do WhatsApp com IA.
+ * Utiliza debounce de 10s agrupando por remetente.
+ */
+export const processIncomingMessage = inngest.createFunction(
+  {
+    id: 'process-incoming-message',
+    name: 'WhatsApp: Processa Mensagem com IA',
+    triggers: [{ event: 'whatsapp/message.received' }],
+    debounce: {
+      key: 'event.data.sender',
+      period: '10s',
+    },
+  },
+  async ({ event, step }) => {
+    const { sender, content, instanceId, instanceName } = event.data;
+
+    // Resolve a organização do membro antes de processar
+    const organizationId = await step.run('resolve-organization', async () => {
+      const member = await NotificationService.findMemberByPhone(sender);
+      if (member?.organizationId) {
+        return member.organizationId;
+      }
+
+      // Fallback via Audit Logs
+      console.log(`[PROCESS_INCOMING_MSG] Audit log lookup fallback for instanceName=${instanceName}`);
+      const lastAudit = await db.query.auditLogs.findFirst({
+        where: (audit, { or, ilike, and, eq }) => and(
+          or(
+            instanceId ? ilike(audit.userName, `%${instanceId}%`) : undefined,
+            instanceName ? ilike(audit.userName, `%${instanceName}%`) : undefined
+          ),
+          eq(audit.userId, 'system-evolution-go')
+        ),
+        orderBy: (audit, { desc }) => [desc(audit.createdAt)],
+      });
+
+      if (lastAudit?.organizationId) {
+        return lastAudit.organizationId;
+      }
+
+      // Fallback padrão
+      const firstMember = await db.query.members.findFirst();
+      return firstMember?.organizationId || 'system';
+    });
+
+    const result = await step.run('execute-handler-use-case', async () => {
+      return await handleIncomingMessageUseCase({
+        sender,
+        content,
+        organizationId,
+      });
+    });
+
+    return { status: 'completed', result };
+  }
 );
