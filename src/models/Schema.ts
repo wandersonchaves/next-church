@@ -16,6 +16,8 @@ export const journeyStepEnum = pgEnum('journey_step', [
 
 export const genderEnum = pgEnum('gender', ['M', 'F']);
 
+export const memberStatusEnum = pgEnum('member_status', ['ACTIVE', 'AWAITING_UPDATE', 'UPDATED']);
+
 /**
  * Tabelas do Sistema
  */
@@ -58,6 +60,8 @@ export const members = pgTable('members', {
   generationSlot: integer('generation_slot'),
   isBaptized: boolean('is_baptized').default(false).notNull(),
   kidsNotes: text('kids_notes'),
+  address: text('address'),
+  status: memberStatusEnum('status').default('ACTIVE').notNull(),
   currentStep: journeyStepEnum('current_step').default('DECISION').notNull(),
   isLeader: boolean('is_leader').default(false).notNull(),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),

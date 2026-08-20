@@ -3,9 +3,15 @@ import { playwright } from '@vitest/browser-playwright';
 import { loadEnv } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   test: {
     coverage: {
       include: ['src/**/*'],
