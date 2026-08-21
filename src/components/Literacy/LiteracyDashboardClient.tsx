@@ -101,7 +101,6 @@ export const LiteracyDashboardClient = (props: {
 }) => {
   const [students, setStudents] = React.useState<Student[]>(props.initialStudents);
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [selectedShift, setSelectedShift] = React.useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = React.useState<string>('ALL');
   const [copiedLink, setCopiedLink] = React.useState(false);
   const [editingStudentId, setEditingStudentId] = React.useState<string | null>(null);
@@ -117,12 +116,11 @@ export const LiteracyDashboardClient = (props: {
         (s.neighborhood && s.neighborhood.toLowerCase().includes(searchTerm.toLowerCase())) ||
         s.address.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesShift = selectedShift === 'ALL' || s.preferredShift === selectedShift;
       const matchesStatus = selectedStatus === 'ALL' || s.status === selectedStatus;
 
-      return matchesSearch && matchesShift && matchesStatus;
+      return matchesSearch && matchesStatus;
     });
-  }, [students, searchTerm, selectedShift, selectedStatus]);
+  }, [students, searchTerm, selectedStatus]);
 
   const handleCopyLink = async () => {
     if (typeof window !== 'undefined') {
@@ -242,20 +240,14 @@ export const LiteracyDashboardClient = (props: {
 
           <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-400">Turno Mais Procurado</span>
-              <div className="rounded-2xl bg-amber-50 p-2.5 text-amber-600">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400">Horário das Aulas</span>
+              <div className="rounded-2xl bg-indigo-50 p-2.5 text-indigo-600">
                 <Clock size={20} />
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">
-                {props.metrics.byShift.NOITE >= props.metrics.byShift.TARDE && props.metrics.byShift.NOITE >= props.metrics.byShift.MANHA
-                  ? '🌙 Noite'
-                  : props.metrics.byShift.TARDE >= props.metrics.byShift.MANHA
-                  ? '🌤️ Tarde'
-                  : '☀️ Manhã'}
-              </span>
-              <span className="text-xs font-bold text-slate-400">({props.metrics.byShift.NOITE} noite)</span>
+              <span className="text-2xl font-black text-slate-900">🌙 Noite</span>
+              <span className="text-xs font-bold text-slate-400">(Período Noturno)</span>
             </div>
           </div>
 
@@ -288,42 +280,22 @@ export const LiteracyDashboardClient = (props: {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1">
-              <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">Turno:</span>
-              {['ALL', 'MANHA', 'TARDE', 'NOITE', 'SABADO'].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSelectedShift(s)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                    selectedShift === s
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-200/50'
-                  }`}
-                >
-                  {s === 'ALL' ? 'Todos' : shiftLabels[s]?.label || s}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1">
-              <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">Status:</span>
-              {['ALL', 'INSCRITO', 'TURMA_FORMADA'].map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setSelectedStatus(st)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                    selectedStatus === st
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-200/50'
-                  }`}
-                >
-                  {st === 'ALL' ? 'Todos' : st === 'INSCRITO' ? 'Inscritos' : 'Em Turma'}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+            <span className="px-2 text-[10px] font-black uppercase tracking-wider text-slate-400">Status:</span>
+            {['ALL', 'INSCRITO', 'CONFIRMADO', 'TURMA_FORMADA'].map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setSelectedStatus(st)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                  selectedStatus === st
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-200/50'
+                }`}
+              >
+                {st === 'ALL' ? 'Todos' : st === 'INSCRITO' ? 'Inscritos' : st === 'CONFIRMADO' ? 'Confirmados' : 'Em Turma'}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -365,14 +337,13 @@ export const LiteracyDashboardClient = (props: {
                   <th className="px-6 py-4">Aluno / Idade</th>
                   <th className="px-6 py-4">Contato / Responsável</th>
                   <th className="px-6 py-4">Endereço & Bairro</th>
-                  <th className="px-6 py-4">Escolaridade & Turno</th>
+                  <th className="px-6 py-4">Escolaridade</th>
                   <th className="px-6 py-4">Turma & Status</th>
                   <th className="px-6 py-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredStudents.map((student) => {
-                  const shift = shiftLabels[student.preferredShift];
                   const status = statusLabels[student.status] || statusLabels.INSCRITO;
 
                   return (
@@ -432,20 +403,10 @@ export const LiteracyDashboardClient = (props: {
                         </div>
                       </td>
 
-                      {/* ESCOLARIDADE & TURNO */}
+                      {/* ESCOLARIDADE */}
                       <td className="px-6 py-4">
                         <div className="text-xs font-bold text-slate-800">
                           {educationLabels[student.educationLevel] || student.educationLevel}
-                        </div>
-                        <div className="mt-1">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
-                              shift?.color || 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            <span>{shift?.icon}</span>
-                            <span>{shift?.label}</span>
-                          </span>
                         </div>
                       </td>
 

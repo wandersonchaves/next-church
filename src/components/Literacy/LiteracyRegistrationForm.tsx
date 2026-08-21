@@ -337,11 +337,16 @@ export const LiteracyRegistrationForm = (props: {
         </div>
       </div>
 
-      {/* SEÇÃO 4: ESCOLARIDADE E TURNO PREFERENCIAL */}
+      {/* SEÇÃO 4: ESCOLARIDADE */}
       <div className="space-y-4 border-t border-slate-100 pt-6">
-        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
-          <BookOpen size={16} className="text-blue-600" />
-          4. Nível de Escolaridade & Formação de Turma
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
+            <BookOpen size={16} className="text-blue-600" />
+            4. Nível de Escolaridade
+          </div>
+          <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-bold text-indigo-700">
+            🌙 Turmas Noturnas
+          </span>
         </div>
 
         <div className="space-y-2">
@@ -369,34 +374,6 @@ export const LiteracyRegistrationForm = (props: {
               >
                 <span>{item.label}</span>
                 {selectedEducation === item.value && <Check size={16} className="text-blue-600 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2 pt-2">
-          <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
-            <Clock size={14} className="text-blue-600" />
-            Melhor Horário / Turno para as Aulas <span className="text-red-500">*</span>
-          </label>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { value: 'MANHA', label: '☀️ Manhã' },
-              { value: 'TARDE', label: '🌤️ Tarde' },
-              { value: 'NOITE', label: '🌙 Noite' },
-              { value: 'SABADO', label: '📅 Sábado' },
-            ].map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setValue('preferredShift', item.value as any)}
-                className={`flex items-center justify-center gap-1.5 rounded-2xl border-2 py-3.5 text-xs font-black uppercase tracking-wider transition-all ${
-                  selectedShift === item.value
-                    ? 'border-blue-600 bg-blue-600 text-white shadow-md'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                {item.label}
               </button>
             ))}
           </div>

@@ -29,6 +29,10 @@ export default async function LiteracyPublicPage(props: {
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-6 pt-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <span className="flex items-center gap-1.5 text-indigo-700 font-black">
+            <span>🌙</span>
+            Aulas no Período Noturno
+          </span>
           <span className="flex items-center gap-1.5">
             <Sparkles size={14} className="text-amber-500" />
             100% Gratuito

@@ -475,23 +475,20 @@ export default function CommunicationPage() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Turno de Estudo</label>
-                      <select value={literacyShift} onChange={e => setLiteracyShift(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Todos os Turnos</option>
-                        <option value="MANHA">☀️ Manhã</option>
-                        <option value="TARDE">🌤️ Tarde</option>
-                        <option value="NOITE">🌙 Noite</option>
-                        <option value="SABADO">📅 Sábado</option>
-                      </select>
+                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Horário das Turmas</label>
+                      <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs font-bold text-indigo-700 flex items-center gap-2">
+                        <span>🌙</span>
+                        <span>Todas as turmas serão no período da Noite</span>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
                       <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Status do Aluno</label>
                       <select value={literacyStatus} onChange={e => setLiteracyStatus(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Todos os Status</option>
+                        <option value="">Todos os Inscritos da Alfabetização</option>
                         <option value="INSCRITO">Inscritos (Pendentes)</option>
                         <option value="CONFIRMADO">Confirmados</option>
-                        <option value="TURMA_FORMADA">Em Turma</option>
+                        <option value="TURMA_FORMADA">Em Turma Formada</option>
                         <option value="DESISTENTE">Desistentes</option>
                       </select>
                     </div>
