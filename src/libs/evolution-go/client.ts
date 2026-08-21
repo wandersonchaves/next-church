@@ -22,6 +22,7 @@ export interface InstanceStatusResult {
   loggedIn?: boolean;
   name?: string;
   state?: string;
+  disconnectReason?: string;
   error?: string;
   latencyMs?: number;
 }
@@ -122,13 +123,7 @@ export class EvolutionGoClient {
 
     const endpoints = [
       `${this.baseUrl}/send/text`,
-      `${this.baseUrl}/message/sendText`,
     ];
-
-    if (instanceName) {
-      endpoints.push(`${this.baseUrl}/message/sendText/${instanceName}`);
-      endpoints.push(`${this.baseUrl}/send/text/${instanceName}`);
-    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -197,6 +192,13 @@ export class EvolutionGoClient {
             };
           }
 
+          // Se for erro de dispositivo não encontrado no WhatsApp (whatsmeow JID)
+          if (rawResponseText.includes("device JID") || rawResponseText.includes("doesn't contain a device")) {
+            lastError = `Número ${num} não possui conta ou dispositivo ativo no WhatsApp (device JID not found)`;
+            console.warn(`[EVOLUTION] [SEND_WARN] POST ${url} [HTTP ${response.status}] in ${elapsed}ms -> Number: ${num} -> WhatsApp account not found on device store.`);
+            break; // Pula para o próximo candidate sem tentar rotas inexistentes
+          }
+
           lastError = `Endpoint ${url} retornou HTTP ${response.status} (${response.statusText}): ${rawResponseText.slice(0, 200)}`;
           console.warn(`[EVOLUTION] [SEND_WARN] POST ${url} [HTTP ${response.status}] in ${elapsed}ms -> Number: ${num} -> Response: ${rawResponseText.slice(0, 300)}`);
         } catch (error) {
@@ -208,7 +210,7 @@ export class EvolutionGoClient {
       }
     }
 
-    console.error(`[EVOLUTION] [SEND_EXHAUSTED] All endpoints and candidates failed for ${to}. Last error: ${lastError}`);
+    console.error(`[EVOLUTION] [SEND_EXHAUSTED] All candidates failed for ${to}. Reason: ${lastError}`);
 
     if (organizationId) {
       NotificationService.saveOutgoingMessage({
@@ -278,7 +280,7 @@ export class EvolutionGoClient {
         const response = await fetch(url, {
           method: 'GET',
           headers,
-          next: { revalidate: 30 },
+          cache: 'no-store',
           signal: AbortSignal.timeout(8000),
         });
 
@@ -289,24 +291,42 @@ export class EvolutionGoClient {
         }
 
         const result = await response.json();
-        const connected = result.data?.Connected === true ||
-          result.instance?.state === 'open' ||
-          result.state === 'open' ||
-          result.status === 'open';
+        const rawData = result.data || result.instance || result;
+        const rawConnected = rawData.Connected ?? rawData.connected;
+        const rawLoggedIn = rawData.LoggedIn ?? rawData.loggedIn;
+        const state = (rawData.state || rawData.status || '').toLowerCase();
+        const disconnectReason = rawData.disconnect_reason || result.disconnect_reason;
 
-        const loggedIn = result.data?.LoggedIn === true ||
-          result.instance?.state === 'open' ||
-          result.state === 'open' ||
-          connected;
+        let connected = false;
+        if (typeof rawConnected === 'boolean') {
+          connected = rawConnected;
+        } else if (state === 'open') {
+          connected = true;
+        }
 
-        const name = result.data?.Name || result.instance?.name || result.name || this.instanceName;
+        let loggedIn = false;
+        if (typeof rawLoggedIn === 'boolean') {
+          loggedIn = rawLoggedIn;
+        } else if (state === 'open') {
+          loggedIn = true;
+        }
 
-        console.info(`[EVOLUTION] [STATUS_OK] Checked ${url} in ${elapsed}ms -> Connected: ${connected}, LoggedIn: ${loggedIn}, Name: ${name}`);
+        // Se o estado for explicitamente fechado ou desconectado
+        if (['close', 'closed', 'disconnected', 'logout', 'loggedout'].includes(state)) {
+          connected = false;
+          loggedIn = false;
+        }
+
+        const name = rawData.Name || rawData.name || this.instanceName;
+
+        console.info(`[EVOLUTION] [STATUS_OK] Checked ${url} in ${elapsed}ms -> Connected: ${connected}, LoggedIn: ${loggedIn}, State: ${state || 'N/A'}, Name: ${name}`);
 
         return {
           connected,
           loggedIn,
           name,
+          state,
+          disconnectReason,
           latencyMs: elapsed,
         };
       } catch (error) {

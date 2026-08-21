@@ -26,8 +26,7 @@ export const watchdogWhatsAppConnection = inngest.createFunction(
     ]
   },
   async ({ step }) => {
-    console.log("🚀 ~ step:", step)
-    console.log("🕵️ [WATCHDOG] Iniciando verificação de conexão...");
+    console.info("🕵️ [WATCHDOG] Iniciando verificação de conexão...");
 
     const status = await step.run("check-connection", async () => {
       const client = EvolutionGoClient.getInstance();

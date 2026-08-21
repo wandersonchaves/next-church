@@ -191,9 +191,27 @@ export default function CommunicationPage() {
                 {status && (
                   <>
                     <span className="h-1 w-1 rounded-full bg-slate-200" />
-                    <div className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${status.connected ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {status.connected ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                      {status.connected ? `Online: ${status.name || 'WhatsApp'}` : 'Desconectado'}
+                    <div
+                      className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${
+                        status.connected && status.loggedIn
+                          ? 'text-emerald-600'
+                          : status.connected && !status.loggedIn
+                          ? 'text-amber-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
+                      {status.connected && status.loggedIn ? (
+                        <CheckCircle2 size={10} />
+                      ) : status.connected && !status.loggedIn ? (
+                        <RefreshCw size={10} />
+                      ) : (
+                        <XCircle size={10} />
+                      )}
+                      {status.connected && status.loggedIn
+                        ? `Online: ${status.name || 'WhatsApp'}`
+                        : status.connected && !status.loggedIn
+                        ? 'Aguardando Login (QR Code)'
+                        : 'Desconectado'}
                     </div>
                   </>
                 )}
