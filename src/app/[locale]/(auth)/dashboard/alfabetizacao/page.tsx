@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { setRequestLocale } from 'next-intl/server';
 import { LiteracyDashboardClient } from '@/components/Literacy/LiteracyDashboardClient';
 import {
@@ -25,6 +25,17 @@ export default async function LiteracyDashboardPage(props: {
     );
   }
 
+  let organizationName = 'Sua Igreja';
+  try {
+    const client = await clerkClient();
+    const org = await client.organizations.getOrganization({ organizationId: orgId });
+    if (org.name) {
+      organizationName = org.name;
+    }
+  } catch {
+    // Fallback silencioso
+  }
+
   const [students, metrics] = await Promise.all([
     getLiteracyStudentsAction(),
     getLiteracyMetricsAction(),
@@ -34,6 +45,7 @@ export default async function LiteracyDashboardPage(props: {
     <LiteracyDashboardClient
       initialStudents={students as any}
       metrics={metrics}
+      organizationName={organizationName}
     />
   );
 }

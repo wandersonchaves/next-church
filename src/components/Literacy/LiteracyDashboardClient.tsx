@@ -19,12 +19,14 @@ import {
   Copy,
   Check,
   Filter,
+  Download,
 } from 'lucide-react';
 import { Link } from '@/libs/I18nNavigation';
 import {
   assignLiteracyClassAction,
   deleteLiteracyStudentAction,
 } from '@/app/[locale]/(auth)/dashboard/alfabetizacao/actions';
+import { LiteracyExportModal } from './LiteracyExportModal';
 
 interface Student {
   id: string;
@@ -98,6 +100,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 export const LiteracyDashboardClient = (props: {
   initialStudents: Student[];
   metrics: Metrics | null;
+  organizationName?: string;
 }) => {
   const [students, setStudents] = React.useState<Student[]>(props.initialStudents);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -105,6 +108,7 @@ export const LiteracyDashboardClient = (props: {
   const [copiedLink, setCopiedLink] = React.useState(false);
   const [editingStudentId, setEditingStudentId] = React.useState<string | null>(null);
   const [newClassInput, setNewClassInput] = React.useState('');
+  const [showExportModal, setShowExportModal] = React.useState(false);
 
   const filteredStudents = React.useMemo(() => {
     return students.filter((s) => {
@@ -181,6 +185,15 @@ export const LiteracyDashboardClient = (props: {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 rounded-2xl border-2 border-indigo-200 bg-indigo-50/70 px-5 py-3 text-xs font-black uppercase tracking-wider text-indigo-700 transition-all hover:bg-indigo-100 active:scale-95 shadow-xs"
+          >
+            <Download size={16} />
+            Exportar p/ Órgão
+          </button>
+
           <button
             type="button"
             onClick={handleCopyLink}
@@ -498,6 +511,13 @@ export const LiteracyDashboardClient = (props: {
           </div>
         )}
       </div>
+
+      <LiteracyExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        students={students}
+        organizationName={props.organizationName || 'NextChurch'}
+      />
     </div>
   );
 };

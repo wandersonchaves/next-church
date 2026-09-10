@@ -21,10 +21,11 @@ export default async function ActivityPage(props: { params: Promise<{ locale: st
     .limit(50);
 
   const actionColors: Record<string, string> = {
-    'CREATE': 'text-emerald-600 bg-emerald-50',
-    'UPDATE': 'text-blue-600 bg-blue-50',
-    'DELETE': 'text-red-600 bg-red-50',
-    'PROMOTE': 'text-amber-600 bg-amber-50',
+    CREATE: 'text-emerald-600 bg-emerald-50',
+    UPDATE: 'text-blue-600 bg-blue-50',
+    DELETE: 'text-red-600 bg-red-50',
+    PROMOTE: 'text-amber-600 bg-amber-50',
+    EXPORT: 'text-indigo-600 bg-indigo-50',
   };
 
   return (

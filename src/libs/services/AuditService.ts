@@ -3,7 +3,7 @@ import { db } from '@/libs/DB';
 import { auditLogs } from '@/models/Schema';
 import { and, desc, eq, gte } from 'drizzle-orm';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PROMOTE';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PROMOTE' | 'EXPORT';
 export type AuditEntityType = 'MEMBER' | 'MINISTRY' | 'TEAM' | 'LITERACY';
 
 /**
