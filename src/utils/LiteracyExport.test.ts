@@ -31,6 +31,7 @@ describe('LiteracyExport', () => {
   describe('formatBrazilianDate', () => {
     it('formats valid Date to DD/MM/AAAA format', () => {
       const date = new Date(1995, 4, 18); // May 18, 1995
+
       expect(formatBrazilianDate(date)).toBe('18/05/1995');
     });
 
@@ -43,6 +44,7 @@ describe('LiteracyExport', () => {
   describe('formatBrazilianDateTime', () => {
     it('formats date and time accurately', () => {
       const date = new Date(2026, 2, 10, 14, 30);
+
       expect(formatBrazilianDateTime(date)).toBe('10/03/2026 14:30');
     });
   });
@@ -91,6 +93,7 @@ describe('LiteracyExport', () => {
 
     it('handles empty list returning headers only with BOM', () => {
       const csv = generateLiteracyCsv([]);
+
       expect(csv.startsWith('\uFEFF')).toBe(true);
       expect(csv).toBe(`\uFEFF${LITERACY_EXPORT_HEADERS.join(';')}`);
     });

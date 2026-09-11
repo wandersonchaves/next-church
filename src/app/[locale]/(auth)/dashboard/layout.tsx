@@ -21,7 +21,7 @@ export default async function DashboardLayout(props: {
       </main>
 
       {/* FOOTER DISCRETO */}
-      <footer className="mt-20 border-t border-slate-100 bg-white py-10 text-center">
+      <footer className="mt-20 border-t border-slate-100 bg-white py-10 text-center print:hidden">
         <p className="text-[10px] font-black tracking-[0.3em] text-slate-300 uppercase">
           NextChurch • G12 Vision Management
         </p>

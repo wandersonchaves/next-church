@@ -1,15 +1,16 @@
 'use server';
 
 import { auth } from '@clerk/nextjs/server';
-import { db } from '@/libs/DB';
-import { literacyStudents } from '@/models/Schema';
-import { LiteracyStudentSchema, type LiteracyStudentInput } from '@/validations/LiteracyValidation';
-import { logActivity } from '@/libs/services/AuditService';
 import { and, desc, eq, ilike, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { db } from '@/libs/DB';
+import { logActivity } from '@/libs/services/AuditService';
+import { literacyStudents } from '@/models/Schema';
+import { type LiteracyStudentInput, LiteracyStudentSchema } from '@/validations/LiteracyValidation';
 
 /**
  * Cadastra um novo aluno na lista de Alfabetização dentro do dashboard.
+ * @param data
  */
 export async function createLiteracyStudentAction(data: LiteracyStudentInput) {
   const { orgId } = await auth();
@@ -47,7 +48,7 @@ export async function createLiteracyStudentAction(data: LiteracyStudentInput) {
       })
       .returning();
 
-    await logActivity('CREATE', 'LITERACY', `${student?.studentName} (Alfabetização)`).catch(() => {});
+    await logActivity('CREATE', 'LITERACY', `${student?.studentName} (Alfabetização)`).catch(() => { });
 
     revalidatePath('/dashboard/alfabetizacao');
     return { success: true, student };
@@ -59,6 +60,10 @@ export async function createLiteracyStudentAction(data: LiteracyStudentInput) {
 
 /**
  * Busca a lista de alunos da Alfabetização da organização com filtros opcionais.
+ * @param filters
+ * @param filters.query
+ * @param filters.shift
+ * @param filters.status
  */
 export async function getLiteracyStudentsAction(filters?: {
   query?: string;
@@ -66,7 +71,9 @@ export async function getLiteracyStudentsAction(filters?: {
   status?: string;
 }) {
   const { orgId } = await auth();
-  if (!orgId) return [];
+  if (!orgId) {
+    return [];
+  }
 
   try {
     const conditions = [eq(literacyStudents.organizationId, orgId)];
@@ -87,8 +94,8 @@ export async function getLiteracyStudentsAction(filters?: {
           ilike(literacyStudents.guardianName, q),
           ilike(literacyStudents.guardianPhone, q),
           ilike(literacyStudents.neighborhood, q),
-          ilike(literacyStudents.address, q)
-        )!
+          ilike(literacyStudents.address, q),
+        )!,
       );
     }
 
@@ -108,7 +115,9 @@ export async function getLiteracyStudentsAction(filters?: {
  */
 export async function getLiteracyMetricsAction() {
   const { orgId } = await auth();
-  if (!orgId) return null;
+  if (!orgId) {
+    return null;
+  }
 
   try {
     const all = await db
@@ -155,15 +164,23 @@ export async function getLiteracyMetricsAction() {
 
 /**
  * Atualiza os dados de um aluno da Alfabetização.
+ * @param id
+ * @param data
  */
 export async function updateLiteracyStudentAction(id: string, data: Partial<LiteracyStudentInput>) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado.' };
+  if (!orgId) {
+    return { error: 'Não autorizado.' };
+  }
 
   try {
     const updateValues: Record<string, any> = { ...data };
-    if (data.age) updateValues.age = Number(data.age);
-    if (data.birthDate) updateValues.birthDate = new Date(data.birthDate);
+    if (data.age) {
+      updateValues.age = Number(data.age);
+    }
+    if (data.birthDate) {
+      updateValues.birthDate = new Date(data.birthDate);
+    }
 
     const [updated] = await db
       .update(literacyStudents)
@@ -172,7 +189,7 @@ export async function updateLiteracyStudentAction(id: string, data: Partial<Lite
       .returning();
 
     if (updated) {
-      await logActivity('UPDATE', 'LITERACY', `${updated.studentName} (Alfabetização)`).catch(() => {});
+      await logActivity('UPDATE', 'LITERACY', `${updated.studentName} (Alfabetização)`).catch(() => { });
     }
 
     revalidatePath('/dashboard/alfabetizacao');
@@ -185,10 +202,15 @@ export async function updateLiteracyStudentAction(id: string, data: Partial<Lite
 
 /**
  * Atualiza rapidamente a turma atribuída e status do aluno.
+ * @param id
+ * @param assignedClass
+ * @param status
  */
 export async function assignLiteracyClassAction(id: string, assignedClass: string, status?: 'INSCRITO' | 'CONFIRMADO' | 'TURMA_FORMADA' | 'DESISTENTE') {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado.' };
+  if (!orgId) {
+    return { error: 'Não autorizado.' };
+  }
 
   try {
     const [updated] = await db
@@ -201,7 +223,7 @@ export async function assignLiteracyClassAction(id: string, assignedClass: strin
       .returning();
 
     if (updated) {
-      await logActivity('UPDATE', 'LITERACY', `Turma: ${assignedClass} para ${updated.studentName}`).catch(() => {});
+      await logActivity('UPDATE', 'LITERACY', `Turma: ${assignedClass} para ${updated.studentName}`).catch(() => { });
     }
 
     revalidatePath('/dashboard/alfabetizacao');
@@ -214,10 +236,13 @@ export async function assignLiteracyClassAction(id: string, assignedClass: strin
 
 /**
  * Remove um registro de aluno da Alfabetização.
+ * @param id
  */
 export async function deleteLiteracyStudentAction(id: string) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado.' };
+  if (!orgId) {
+    return { error: 'Não autorizado.' };
+  }
 
   try {
     const [student] = await db
@@ -231,7 +256,7 @@ export async function deleteLiteracyStudentAction(id: string) {
       .where(and(eq(literacyStudents.id, id), eq(literacyStudents.organizationId, orgId)));
 
     if (student) {
-      await logActivity('DELETE', 'LITERACY', `${student.studentName} (Alfabetização)`).catch(() => {});
+      await logActivity('DELETE', 'LITERACY', `${student.studentName} (Alfabetização)`).catch(() => { });
     }
 
     revalidatePath('/dashboard/alfabetizacao');
@@ -240,4 +265,25 @@ export async function deleteLiteracyStudentAction(id: string) {
     console.error('[DELETE_LITERACY_STUDENT_ERROR]', error);
     return { error: error instanceof Error ? error.message : 'Falha ao excluir registro.' };
   }
+}
+
+/**
+ * Registra a exportação da lista de alunos no log de auditoria do sistema.
+ * @param status - Situação dos alunos filtrados na exportação.
+ * @param count - Quantidade total de alunos exportados.
+ * @returns Confirmação de registro da auditoria.
+ */
+export async function logLiteracyExportAuditAction(status: string, count: number) {
+  const { orgId } = await auth();
+  if (!orgId) {
+    return { success: false };
+  }
+
+  await logActivity(
+    'EXPORT',
+    'LITERACY',
+    `Exportação de ${count} alunos (${status}) em planilha CSV/Excel`,
+  ).catch(() => { });
+
+  return { success: true };
 }

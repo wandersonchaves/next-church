@@ -1,23 +1,18 @@
 'use client';
 
-import * as React from 'react';
 import {
-  Building2,
   Check,
   Download,
+  ExternalLink,
   FileSpreadsheet,
   FileText,
   Printer,
   X,
 } from 'lucide-react';
-import {
-  EDUCATION_EXPORT_LABELS,
-  formatBrazilianDate,
-  GENDER_EXPORT_LABELS,
-  SHIFT_EXPORT_LABELS,
-  STATUS_EXPORT_LABELS,
-  type LiteracyExportStudent,
-} from '@/utils/LiteracyExport';
+import * as React from 'react';
+import { logLiteracyExportAuditAction } from '@/app/[locale]/(auth)/dashboard/alfabetizacao/actions';
+import { generateLiteracyCsv, type LiteracyExportStudent } from '@/utils/LiteracyExport';
+import { LiteracyOfficialReportDocument } from './LiteracyOfficialReportDocument';
 
 export const LiteracyExportModal = (props: {
   isOpen: boolean;
@@ -41,24 +36,32 @@ export const LiteracyExportModal = (props: {
   });
 
   const handleDownloadCsv = () => {
-    setIsDownloading(true);
-    const params = new URLSearchParams();
-    if (selectedStatus) params.set('status', selectedStatus);
-    if (selectedShift && selectedShift !== 'ALL') params.set('shift', selectedShift);
+    try {
+      setIsDownloading(true);
 
-    const downloadUrl = `/api/literacy/export?${params.toString()}`;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const safeStatus = selectedStatus.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const filename = `relacao_alunos_alfabetizacao_${safeStatus}_${dateStr}.csv`;
 
-    // Link temporário para acionar o download nativo com máxima performance e streaming
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.setAttribute('download', '');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const csvContent = generateLiteracyCsv(filteredStudents);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-    setTimeout(() => {
-      setIsDownloading(false);
-    }, 1500);
+      logLiteracyExportAuditAction(selectedStatus, filteredStudents.length).catch(() => {});
+    } catch (error) {
+      console.error('Erro ao baixar planilha CSV:', error);
+    } finally {
+      setTimeout(() => {
+        setIsDownloading(false);
+      }, 500);
+    }
   };
 
   const handlePrint = () => {
@@ -67,15 +70,15 @@ export const LiteracyExportModal = (props: {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs print:p-0 print:bg-white">
-      {viewMode === 'OPTIONS' ? (
-        <div className="relative w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl md:p-8 animate-in fade-in zoom-in-95 duration-150">
+  if (viewMode === 'OPTIONS') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs print:hidden">
+        <div className="relative w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl duration-150 md:p-8">
           {/* BOTÃO FECHAR */}
           <button
             type="button"
             onClick={props.onClose}
-            className="absolute top-6 right-6 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="absolute top-6 right-6 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
             <X size={20} />
           </button>
@@ -86,7 +89,7 @@ export const LiteracyExportModal = (props: {
               <Download size={24} />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+              <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase">
                 Encaminhamento Oficial
               </span>
               <h2 className="text-xl font-black text-slate-900">
@@ -95,47 +98,48 @@ export const LiteracyExportModal = (props: {
             </div>
           </div>
 
-          <p className="mt-3 text-xs font-medium text-slate-500 leading-relaxed">
+          <p className="mt-3 text-xs leading-relaxed font-medium text-slate-500">
             Gere a planilha de dados ou a relação nominal impressa para envio à Secretaria de Educação, Conselho de Assistência, MEC ou órgão homologador responsável.
           </p>
 
           {/* FILTROS DE EXPORTAÇÃO */}
           <div className="mt-6 space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
             <div>
-              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700">
+              <span className="block text-[11px] font-black tracking-wider text-slate-700 uppercase">
                 Filtrar por Situação da Inscrição:
-              </label>
+              </span>
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                 {[
                   { id: 'INSCRITO', label: 'Apenas Inscritos (Aguardando Turma)' },
                   { id: 'ALL', label: 'Todos os Alunos' },
                   { id: 'CONFIRMADO', label: 'Confirmados' },
                   { id: 'TURMA_FORMADA', label: 'Em Turma Formada' },
-                ].map((item) => (
+                ].map(item => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setSelectedStatus(item.id)}
-                    className={`flex items-center justify-between rounded-xl border p-2.5 font-bold transition-all text-left ${
+                    className={`flex items-center justify-between rounded-xl border p-2.5 text-left font-bold transition-all ${
                       selectedStatus === item.id
                         ? 'border-blue-600 bg-blue-50/80 text-blue-700 shadow-xs'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
                     <span>{item.label}</span>
-                    {selectedStatus === item.id && <Check size={14} className="text-blue-600 shrink-0" />}
+                    {selectedStatus === item.id && <Check size={14} className="shrink-0 text-blue-600" />}
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700">
+              <label htmlFor="export-shift-select" className="block text-[11px] font-black tracking-wider text-slate-700 uppercase">
                 Filtrar por Turno Preferencial:
               </label>
               <select
+                id="export-shift-select"
                 value={selectedShift}
-                onChange={(e) => setSelectedShift(e.target.value)}
+                onChange={e => setSelectedShift(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-600"
               >
                 <option value="ALL">Todos os Turnos</option>
@@ -150,7 +154,9 @@ export const LiteracyExportModal = (props: {
             <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-xs">
               <span className="font-bold text-slate-500">Alunos a exportar:</span>
               <span className="rounded-lg bg-blue-100/70 px-2.5 py-1 font-black text-blue-800">
-                {filteredStudents.length} aluno(s)
+                {filteredStudents.length}
+                {' '}
+                aluno(s)
               </span>
             </div>
           </div>
@@ -161,7 +167,7 @@ export const LiteracyExportModal = (props: {
               type="button"
               onClick={handleDownloadCsv}
               disabled={isDownloading || filteredStudents.length === 0}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black tracking-wider text-white uppercase shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
             >
               <FileSpreadsheet size={16} />
               {isDownloading ? 'Baixando...' : 'Baixar Planilha CSV (Excel)'}
@@ -171,7 +177,7 @@ export const LiteracyExportModal = (props: {
               type="button"
               onClick={() => setViewMode('PREVIEW')}
               disabled={filteredStudents.length === 0}
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 hover:border-slate-300 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all"
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-xs font-black tracking-wider text-slate-700 uppercase transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
             >
               <FileText size={16} />
               Visualizar Relação Oficial (PDF)
@@ -179,176 +185,94 @@ export const LiteracyExportModal = (props: {
           </div>
 
           <div className="mt-4 text-center">
-            <p className="text-[11px] text-slate-400 font-medium">
+            <p className="text-[11px] font-medium text-slate-400">
               A planilha é formatada em UTF-8 BOM com separador oficial para abrir perfeitamente no Excel sem caracteres corrompidos.
             </p>
           </div>
         </div>
-      ) : (
-        /* VISUALIZAÇÃO DO DOCUMENTO OFICIAL PARA IMPRESSÃO / SALVAR COMO PDF */
-        <div className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-10 print:max-h-none print:w-full print:p-0 print:shadow-none">
-          {/* BARRA DE AÇÕES SUPERIOR (OCULTA NA IMPRESSÃO) */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 print:hidden">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setViewMode('OPTIONS')}
-                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
-              >
-                ← Voltar às Opções
-              </button>
-              <span className="text-xs font-black text-slate-800">
-                Pré-visualização da Relação Oficial
-              </span>
-            </div>
+      </div>
+    );
+  }
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-blue-700 active:scale-95"
-              >
-                <Printer size={16} />
-                Imprimir / Salvar em PDF
-              </button>
-
-              <button
-                type="button"
-                onClick={props.onClose}
-                className="rounded-xl border border-slate-200 p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X size={16} />
-              </button>
-            </div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs print:static print:inset-auto print:z-auto print:block print:overflow-visible print:bg-white print:p-0 print:backdrop-blur-none">
+      <div className="relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-10 print:static print:max-h-none print:w-full print:overflow-visible print:rounded-none print:border-none print:p-0 print:shadow-none">
+        {/* BARRA DE AÇÕES SUPERIOR (OCULTA NA IMPRESSÃO) */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 print:hidden">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setViewMode('OPTIONS')}
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+            >
+              ← Voltar às Opções
+            </button>
+            <span className="text-xs font-black text-slate-800">
+              Pré-visualização da Relação Oficial (
+              {filteredStudents.length}
+              {' '}
+              alunos)
+            </span>
           </div>
 
-          {/* CONTEÚDO DO DOCUMENTO OFICIAL (FORMATADO PARA PAPEL A4 E ENVIO A ÓRGÃO) */}
-          <div className="space-y-6 text-slate-900 font-sans print:space-y-4">
-            {/* CABEÇALHO INSTITUCIONAL */}
-            <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1.5">
-              <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
-                <Building2 size={16} />
-                {props.organizationName || 'NextChurch - Gestão Comunitária'}
-              </div>
-              <h1 className="text-xl font-black uppercase tracking-tight text-slate-950 sm:text-2xl">
-                Programa Comunitário de Alfabetização
-              </h1>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                Relação Oficial de Alunos Inscritos para Encaminhamento e Homologação
-              </h2>
-              <div className="flex flex-wrap items-center justify-center gap-4 pt-2 text-[11px] text-slate-500">
-                <span>Data de Emissão: <strong>{formatBrazilianDate(new Date())}</strong></span>
-                <span>•</span>
-                <span>Situação: <strong>{STATUS_EXPORT_LABELS[selectedStatus] || 'Todos'}</strong></span>
-                <span>•</span>
-                <span>Total de Alunos: <strong>{filteredStudents.length}</strong></span>
-              </div>
-            </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/dashboard/alfabetizacao/relatorio?status=${selectedStatus}&shift=${selectedShift}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              title="Abrir página dedicada para impressão"
+            >
+              <ExternalLink size={14} />
+              Abrir em Nova Aba
+            </a>
 
-            {/* TERMO DE APRESENTAÇÃO */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs text-slate-700 leading-relaxed print:bg-white print:border-slate-300">
-              <p>
-                Abaixo segue a relação nominal dos educandos devidamente inscritos para inserção nas turmas de alfabetização e letramento comunitário, para fins de protocolo, homologação e fornecimento de suporte pedagógico junto ao órgão competente.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-black tracking-wider text-white uppercase shadow-md hover:bg-blue-700 active:scale-95"
+            >
+              <Printer size={16} />
+              Imprimir / Salvar em PDF
+            </button>
 
-            {/* TABELA OFICIAL DE ALUNOS */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-300 text-left text-[11px]">
-                <thead>
-                  <tr className="bg-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-700 border-b border-slate-300 print:bg-slate-200">
-                    <th className="border border-slate-300 px-2 py-2 text-center w-8">Nº</th>
-                    <th className="border border-slate-300 px-3 py-2">Nome do Aluno</th>
-                    <th className="border border-slate-300 px-2 py-2 text-center">Idade</th>
-                    <th className="border border-slate-300 px-2 py-2 text-center">Sexo</th>
-                    <th className="border border-slate-300 px-3 py-2">Escolaridade Atual</th>
-                    <th className="border border-slate-300 px-2 py-2 text-center">Turno</th>
-                    <th className="border border-slate-300 px-3 py-2">Endereço & Bairro</th>
-                    <th className="border border-slate-300 px-3 py-2">Telefone / Contato</th>
-                    <th className="border border-slate-300 px-2 py-2 text-center">Necessidade Especial</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredStudents.map((student, index) => (
-                    <tr key={student.id} className="hover:bg-slate-50 print:hover:bg-transparent">
-                      <td className="border border-slate-300 px-2 py-1.5 text-center font-bold text-slate-500">
-                        {index + 1}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-1.5 font-bold text-slate-900">
-                        {student.studentName}
-                        {student.guardianName && (
-                          <span className="block text-[9px] font-normal text-slate-500">
-                            Resp: {student.guardianName}
-                          </span>
-                        )}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-1.5 text-center font-semibold">
-                        {student.age}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-1.5 text-center font-semibold">
-                        {GENDER_EXPORT_LABELS[student.gender] || student.gender}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-slate-700">
-                        {EDUCATION_EXPORT_LABELS[student.educationLevel] || student.educationLevel}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-1.5 text-center font-medium">
-                        {SHIFT_EXPORT_LABELS[student.preferredShift] || student.preferredShift}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-slate-700">
-                        <span>{student.address}</span>
-                        {student.neighborhood && (
-                          <span className="block text-[9px] font-semibold text-slate-500">
-                            Bairro: {student.neighborhood}
-                          </span>
-                        )}
-                      </td>
-                      <td className="border border-slate-300 px-3 py-1.5 font-semibold text-slate-800">
-                        {student.guardianPhone}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-1.5 text-center">
-                        {student.hasSpecialNeeds ? (
-                          <span className="font-bold text-rose-700">
-                            Sim ({student.specialNeedsDetails || 'Não detalhado'})
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Não</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* TERMO DE ENCERRAMENTO E ASSINATURAS */}
-            <div className="pt-8 space-y-12 break-inside-avoid print:pt-6">
-              <div className="text-xs text-slate-600 text-center">
-                Certificamos que as informações contidas neste documento conferem com as inscrições realizadas junto à comunidade.
-              </div>
-
-              <div className="grid grid-cols-2 gap-8 pt-6 text-center text-xs">
-                <div className="space-y-2">
-                  <div className="border-t border-slate-900 w-4/5 mx-auto pt-2 font-bold text-slate-900">
-                    Coordenação do Programa de Alfabetização
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    {props.organizationName || 'Direção Institucional / Igreja'}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="border-t border-slate-900 w-4/5 mx-auto pt-2 font-bold text-slate-900">
-                    Órgão Responsável / Homologação
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Data do Protocolo: ____ / ____ / ________
-                  </p>
-                </div>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={props.onClose}
+              className="rounded-xl border border-slate-200 p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
-      )}
+
+        {/* DICA DE IMPRESSÃO (OCULTA NA IMPRESSÃO) */}
+        <div className="mb-6 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900 print:hidden">
+          <span className="font-medium">
+            💡
+            {' '}
+            <strong>Dica para o PDF:</strong>
+            {' '}
+            Ao abrir a janela de impressão, selecione
+            {' '}
+            <em>&quot;Salvar como PDF&quot;</em>
+            . Para remover qualquer URL ou data que o navegador possa inserir nas bordas, desmarque a opção
+            {' '}
+            <em>&quot;Cabeçalhos e rodapés&quot;</em>
+            .
+          </span>
+        </div>
+
+        {/* CONTEÚDO DO DOCUMENTO OFICIAL (FORMATADO PARA PAPEL A4 E ENVIO A ÓRGÃO) */}
+        <div className="print:m-0 print:overflow-visible print:p-0">
+          <LiteracyOfficialReportDocument
+            students={filteredStudents}
+            organizationName={props.organizationName}
+            selectedStatus={selectedStatus}
+            selectedShift={selectedShift}
+          />
+        </div>
+      </div>
     </div>
   );
 };

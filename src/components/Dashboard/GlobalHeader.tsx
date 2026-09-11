@@ -1,21 +1,20 @@
 'use client';
 
-import * as React from 'react';
+import { OrganizationSwitcher, UserButton } from '@clerk/nextjs';
 import {
-  LayoutDashboard,
-  Users,
-  Briefcase,
-  History as HistoryIcon,
-  Send,
-  Menu,
-  X,
   Bell,
-  Search,
-  ChevronDown,
+  Briefcase,
   GraduationCap,
+  History as HistoryIcon,
+  LayoutDashboard,
+  Menu,
+  Search,
+  Send,
+  Users,
+  X,
 } from 'lucide-react';
+import * as React from 'react';
 import { Link, usePathname } from '@/libs/I18nNavigation';
-import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
 import { AppConfig } from '@/utils/AppConfig';
 
 export const GlobalHeader = () => {
@@ -34,17 +33,17 @@ export const GlobalHeader = () => {
   const isActive = (href: string) => pathname.includes(href);
 
   return (
-    <header className="sticky top-0 z-100 w-full border-b border-slate-100 bg-white/80 backdrop-blur-md">
+    <header className="sticky top-0 z-100 w-full border-b border-slate-100 bg-white/80 backdrop-blur-md print:hidden">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
 
         {/* LOGO E ORGANIZAÇÃO */}
         <div className="flex items-center gap-8">
-          <Link href="/dashboard" className="flex items-center gap-3 group">
+          <Link href="/dashboard" className="group flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-200 transition-transform group-hover:scale-105">
               <span className="text-lg font-black italic">F</span>
             </div>
             <div className="hidden lg:block">
-              <h1 className="text-sm font-black tracking-tighter text-slate-900 uppercase italic leading-none">{AppConfig.name}</h1>
+              <h1 className="text-sm leading-none font-black tracking-tighter text-slate-900 uppercase italic">{AppConfig.name}</h1>
               <p className="mt-1 text-[8px] font-bold tracking-[0.3em] text-blue-600 uppercase">Vision Hub</p>
             </div>
           </Link>
@@ -55,9 +54,9 @@ export const GlobalHeader = () => {
             <OrganizationSwitcher
               appearance={{
                 elements: {
-                  rootBox: "flex items-center",
-                  organizationSwitcherTrigger: "px-4 py-2 rounded-xl hover:bg-slate-50 transition-all font-bold text-xs uppercase tracking-widest text-slate-600 border border-slate-100",
-                }
+                  rootBox: 'flex items-center',
+                  organizationSwitcherTrigger: 'px-4 py-2 rounded-xl hover:bg-slate-50 transition-all font-bold text-xs uppercase tracking-widest text-slate-600 border border-slate-100',
+                },
               }}
             />
           </div>
@@ -65,7 +64,7 @@ export const GlobalHeader = () => {
 
         {/* NAVEGAÇÃO DESKTOP */}
         <nav className="hidden items-center gap-1 md:flex">
-          {navigation.map(item => {
+          {navigation.map((item) => {
             const Icon = item.icon;
             return (
               <Link
@@ -85,24 +84,24 @@ export const GlobalHeader = () => {
 
         {/* AÇÕES E PERFIL */}
         <div className="flex items-center gap-4">
-          <button className="hidden h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-50 hover:text-slate-900 md:flex transition-colors">
+          <button className="hidden h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900 md:flex">
             <Search size={20} />
           </button>
 
           <div className="relative">
-            <button className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+            <button className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900">
               <Bell size={20} />
               <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full border-2 border-white bg-blue-600" />
             </button>
           </div>
 
-          <div className="h-8 w-px bg-slate-100 mx-2" />
+          <div className="mx-2 h-8 w-px bg-slate-100" />
 
           <UserButton
             appearance={{
               elements: {
-                userButtonAvatarBox: "h-10 w-10 rounded-xl shadow-md shadow-slate-200 border-2 border-white",
-              }
+                userButtonAvatarBox: 'h-10 w-10 rounded-xl shadow-md shadow-slate-200 border-2 border-white',
+              },
             }}
           />
 
@@ -118,12 +117,12 @@ export const GlobalHeader = () => {
 
       {/* MOBILE NAV */}
       {isMenuOpen && (
-        <div className="border-t border-slate-50 bg-white p-6 md:hidden animate-in slide-in-from-top duration-300">
+        <div className="animate-in slide-in-from-top border-t border-slate-50 bg-white p-6 duration-300 md:hidden">
           <div className="mb-6 block md:hidden">
             <OrganizationSwitcher hidePersonal />
           </div>
           <nav className="flex flex-col gap-2">
-            {navigation.map(item => {
+            {navigation.map((item) => {
               const Icon = item.icon;
               return (
                 <Link

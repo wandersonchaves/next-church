@@ -2,8 +2,8 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { setRequestLocale } from 'next-intl/server';
 import { LiteracyDashboardClient } from '@/components/Literacy/LiteracyDashboardClient';
 import {
-  getLiteracyStudentsAction,
   getLiteracyMetricsAction,
+  getLiteracyStudentsAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';

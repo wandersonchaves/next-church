@@ -1,16 +1,17 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
-import { db } from '@/libs/DB';
-import { literacyStudents } from '@/models/Schema';
-import { logActivity } from '@/libs/services/AuditService';
-import { generateLiteracyCsv } from '@/utils/LiteracyExport';
-import { and, asc, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
+import { and, asc, eq } from 'drizzle-orm';
+import { db } from '@/libs/DB';
+import { logActivity } from '@/libs/services/AuditService';
+import { literacyStudents } from '@/models/Schema';
+import { generateLiteracyCsv } from '@/utils/LiteracyExport';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Endpoint de alta performance para exportação da relação de alunos para o órgão responsável.
  * Retorna diretamente o arquivo CSV com codificação UTF-8 BOM compatível com Excel e sistemas de gestão.
+ * @param request - NextRequest com parâmetros de filtro da exportação.
  */
 export async function GET(request: NextRequest) {
   const { orgId } = await auth();
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
     logActivity(
       'EXPORT',
       'LITERACY',
-      `Exportação de ${students.length} alunos (${statusParam}) para órgão responsável (${orgName})`
+      `Exportação de ${students.length} alunos (${statusParam}) para órgão responsável (${orgName})`,
     ).catch(() => {});
 
     const dateStr = new Date().toISOString().slice(0, 10);
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       },
     });
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
     console.error('[LITERACY_EXPORT_ERROR]', error);
     return new Response(
       error instanceof Error ? error.message : 'Erro ao processar exportação de alunos.',
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

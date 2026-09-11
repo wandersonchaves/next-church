@@ -71,9 +71,13 @@ export function escapeCsvCell(value: string | number | boolean | null | undefine
  * @returns Formatted date string or hyphen if invalid.
  */
 export function formatBrazilianDate(date: Date | string | null | undefined): string {
-  if (!date) return '-';
+  if (!date) {
+    return '-';
+  }
   const d = typeof date === 'string' ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) {
+    return '-';
+  }
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -86,9 +90,13 @@ export function formatBrazilianDate(date: Date | string | null | undefined): str
  * @returns Formatted date-time string or hyphen if invalid.
  */
 export function formatBrazilianDateTime(date: Date | string | null | undefined): string {
-  if (!date) return '-';
+  if (!date) {
+    return '-';
+  }
   const d = typeof date === 'string' ? new Date(date) : date;
-  if (Number.isNaN(d.getTime())) return '-';
+  if (Number.isNaN(d.getTime())) {
+    return '-';
+  }
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
