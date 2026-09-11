@@ -1,17 +1,17 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { analyzeMessageWithAI } from '../AIOrchestratorEngine';
+import { db } from '../DB';
+import { members, notificationLogs } from '../../models/Schema';
 import { handleIncomingMessageUseCase } from './HandleIncomingMessageUseCase';
-import { db } from '@/libs/DB';
-import { members, notificationLogs } from '@/models/Schema';
-import { eq, and } from 'drizzle-orm';
-import { analyzeMessageWithAI } from '@/libs/AIOrchestratorEngine';
-import { WhatsAppService } from '@/libs/services/WhatsAppService';
+import { WhatsAppService } from './WhatsAppService';
 
 // Mocks
-vi.mock('@/libs/AIOrchestratorEngine', () => ({
+vi.mock('../AIOrchestratorEngine', () => ({
   analyzeMessageWithAI: vi.fn(),
 }));
 
-vi.mock('@/libs/services/WhatsAppService', () => ({
+vi.mock('./WhatsAppService', () => ({
   WhatsAppService: {
     sendMessage: vi.fn().mockResolvedValue({ sent: true }),
   },
@@ -24,7 +24,7 @@ describe('handleIncomingMessageUseCase', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    testPhone = '5586' + Math.floor(90000000 + Math.random() * 9999999);
+    testPhone = `5586${Math.floor(90000000 + Math.random() * 9999999)}`;
     testJid = `${testPhone}@s.whatsapp.net`;
   });
 
@@ -75,7 +75,7 @@ describe('handleIncomingMessageUseCase', () => {
         expect.objectContaining({
           phone: testJid,
           message: expect.stringContaining('Qual seria o seu nome completo, e-mail ou endereço'),
-        })
+        }),
       );
 
       // Cleanup
@@ -230,7 +230,7 @@ describe('handleIncomingMessageUseCase', () => {
         expect.objectContaining({
           phone: testJid,
           message: expect.stringContaining('Poderia nos dizer qual é o seu nome?'),
-        })
+        }),
       );
 
       // Cleanup
@@ -322,7 +322,7 @@ describe('handleIncomingMessageUseCase', () => {
         expect.objectContaining({
           phone: testJid,
           message: expect.stringContaining('Prazer em conhecer você, *Natalia Chaves*!'),
-        })
+        }),
       );
 
       await db.delete(members).where(eq(members.id, testMember.id));
@@ -370,9 +370,141 @@ describe('handleIncomingMessageUseCase', () => {
         expect.objectContaining({
           phone: testJid,
           message: expect.stringContaining('Cadastro Atualizado!'),
-        })
+        }),
       );
 
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('corrects member name when member introduces themselves with Me chamo Wanderson', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Gabriel',
+          lastName: 'Contato',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedName: 'Wanderson',
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Me chamo Wanderson',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_corrected');
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.firstName).toBe('Wanderson');
+      expect(updatedMember?.lastName).toBe('');
+      expect(updatedMember?.status).toBe('ACTIVE');
+
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('Wanderson'),
+        }),
+      );
+
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('updates member name even if AI classifies intent as OTHER when detectedName is different', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Gabriel',
+          lastName: 'Silva',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OTHER',
+        detectedName: 'Wanderson Chaves',
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Me chamo Wanderson Chaves',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_corrected');
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.firstName).toBe('Wanderson');
+      expect(updatedMember?.lastName).toBe('Chaves');
+      expect(updatedMember?.status).toBe('ACTIVE');
+
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('skips execution when recent outgoing message was already sent within 15 seconds', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Gabriel',
+          lastName: 'Silva',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      const [log] = await db
+        .insert(notificationLogs)
+        .values({
+          organizationId: testOrgId,
+          memberId: testMember.id,
+          type: 'WHATSAPP_OUTGOING',
+          status: 'SENT',
+          content: 'Olá Gabriel!',
+          sentAt: new Date(),
+        })
+        .returning();
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Me chamo Wanderson',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('skipped_recent_outgoing');
+      expect(WhatsAppService.sendMessage).not.toHaveBeenCalled();
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.id, log.id));
       await db.delete(members).where(eq(members.id, testMember.id));
     });
   });

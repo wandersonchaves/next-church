@@ -1,12 +1,17 @@
-import { db } from '@/libs/DB';
-import { members, notificationLogs, auditLogs } from '@/models/Schema';
-import { eq, and, isNull, gte, ilike, sql } from 'drizzle-orm';
+import { and, eq, gte, ilike, isNull, or } from 'drizzle-orm';
 import { analyzeMessageWithAI } from '@/libs/AIOrchestratorEngine';
+import { db } from '@/libs/DB';
 import { NotificationService } from '@/libs/services/NotificationService';
 import { WhatsAppService } from '@/libs/services/WhatsAppService';
+import { auditLogs, members, notificationLogs } from '@/models/Schema';
 
 /**
  * Logs a system-level activity to audit logs since Clerk's auth() is unavailable in background tasks.
+ * @param params
+ * @param params.organizationId
+ * @param params.action
+ * @param params.entityType
+ * @param params.entityName
  */
 async function logSystemActivity(params: {
   organizationId: string;
@@ -30,6 +35,7 @@ async function logSystemActivity(params: {
 
 /**
  * Normalizes a phone number to digits only, removing JID suffix if present.
+ * @param phone
  */
 function cleanPhoneDigits(phone: string): string {
   return phone.split('@')[0].replace(/\D/g, '');
@@ -37,6 +43,10 @@ function cleanPhoneDigits(phone: string): string {
 
 /**
  * Core use case to handle conversational validation and auto-correction of member registration.
+ * @param params
+ * @param params.sender
+ * @param params.content
+ * @param params.organizationId
  */
 export async function handleIncomingMessageUseCase(params: {
   sender: string; // WhatsApp JID (e.g., 5586994037788@s.whatsapp.net)
@@ -45,10 +55,32 @@ export async function handleIncomingMessageUseCase(params: {
 }): Promise<{ status: string }> {
   const { sender, content, organizationId } = params;
 
-  console.log(`[HANDLE_INCOMING_MSG] Processing message from ${sender} (Org: ${organizationId})`);
+  console.warn(`[HANDLE_INCOMING_MSG] Processing message from ${sender} (Org: ${organizationId})`);
 
   // 1. Resolve o membro pelo número de telefone
   const member = await NotificationService.findMemberByPhone(sender);
+
+  // 🛑 TRAVA DE DUPLICIDADE: Se já enviamos uma resposta recente (últimos 15 segundos) para esse membro/remetente, ignora execução duplicada (evita envio duplo Direct + Inngest)
+  const recentReplyWindow = new Date(Date.now() - 15 * 1000);
+  const cleanPhone = cleanPhoneDigits(sender);
+  const recentOutgoing = await db.query.notificationLogs.findFirst({
+    where: and(
+      eq(notificationLogs.organizationId, organizationId),
+      eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+      member?.id
+        ? eq(notificationLogs.memberId, member.id)
+        : or(
+            ilike(notificationLogs.content, `[Para: ${cleanPhone}]%`),
+            ilike(notificationLogs.content, `[Para: ${sender.split('@')[0]}]%`),
+          ),
+      gte(notificationLogs.sentAt, recentReplyWindow),
+    ),
+  });
+
+  if (recentOutgoing) {
+    console.warn(`[HANDLE_INCOMING_MSG] >>> SKIP: Recent outgoing message already sent to ${sender} within last 15s.`);
+    return { status: 'skipped_recent_outgoing' };
+  }
 
   // 2. Busca histórico recente de mensagens nos últimos 5 minutos para acumular contexto
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
@@ -61,7 +93,7 @@ export async function handleIncomingMessageUseCase(params: {
       .where(and(
         eq(notificationLogs.memberId, member.id),
         eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
-        gte(notificationLogs.sentAt, fiveMinutesAgo)
+        gte(notificationLogs.sentAt, fiveMinutesAgo),
       ))
       .orderBy(notificationLogs.sentAt);
   } else {
@@ -73,17 +105,17 @@ export async function handleIncomingMessageUseCase(params: {
         isNull(notificationLogs.memberId),
         eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
         ilike(notificationLogs.content, `[De: ${cleanPhone}]%`),
-        gte(notificationLogs.sentAt, fiveMinutesAgo)
+        gte(notificationLogs.sentAt, fiveMinutesAgo),
       ))
       .orderBy(notificationLogs.sentAt);
   }
 
   // Combina as mensagens recentes
   const combinedContent = recentLogs.length > 0
-    ? recentLogs.map((log) => log.content).join('\n')
+    ? recentLogs.map(log => log.content).join('\n')
     : content;
 
-  console.log(`[HANDLE_INCOMING_MSG] Context: ${combinedContent}`);
+  console.warn(`[HANDLE_INCOMING_MSG] Context: ${combinedContent}`);
 
   // Se o membro existe
   if (member) {
@@ -91,10 +123,10 @@ export async function handleIncomingMessageUseCase(params: {
     const memberFullName = `${member.firstName} ${member.lastName}`.trim();
     const cleanPhone = cleanPhoneDigits(sender);
 
-    console.log(`[HANDLE_INCOMING_MSG] Found member: ${memberFullName} (Status: ${currentStatus})`);
+    console.warn(`[HANDLE_INCOMING_MSG] Found member: ${memberFullName} (Status: ${currentStatus})`);
 
     const result = await analyzeMessageWithAI(content, memberFullName, combinedContent);
-    console.log(`[HANDLE_INCOMING_MSG] AI Intent analysis result:`, result);
+    console.warn(`[HANDLE_INCOMING_MSG] AI Intent analysis result:`, result);
 
     // 🛑 REGRA 1: Opt-Out Imediato (Se a pessoa disse "não", "não quero", "não envie", "parar")
     if (result.detectedOptIn === false) {
@@ -285,14 +317,19 @@ export async function handleIncomingMessageUseCase(params: {
       return { status: 'handled_wrong_number_awaiting_name' };
     }
 
-    // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro (OUTDATED_DATA)
-    const hasDetailsToUpdate = Boolean(
-      result.detectedName ||
-      result.detectedEmail ||
-      result.detectedAddress
+    // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro (OUTDATED_DATA ou correção de nome)
+    const isNameDifferent = Boolean(
+      result.detectedName
+      && result.detectedName.trim().toLowerCase() !== member.firstName.trim().toLowerCase(),
     );
 
-    if (result.intent === 'OUTDATED_DATA') {
+    const hasDetailsToUpdate = Boolean(
+      result.detectedName
+      || result.detectedEmail
+      || result.detectedAddress,
+    );
+
+    if (result.intent === 'OUTDATED_DATA' || isNameDifferent) {
       if (!hasDetailsToUpdate) {
         await db
           .update(members)
@@ -325,34 +362,41 @@ export async function handleIncomingMessageUseCase(params: {
 
       if (result.detectedName) {
         const parts = result.detectedName.trim().split(' ');
-        updatedFirstName = parts[0] || member.firstName;
-        updatedLastName = parts.slice(1).join(' ') || (member.lastName.includes('(F') || member.lastName === 'Contato' ? '' : member.lastName);
+        const newFirst = parts[0] || member.firstName;
+        const newLast = parts.slice(1).join(' ');
+
+        updatedFirstName = newFirst;
+        if (newLast) {
+          updatedLastName = newLast;
+        } else if (newFirst.toLowerCase() !== member.firstName.toLowerCase()) {
+          updatedLastName = '';
+        } else {
+          updatedLastName = (member.lastName.includes('(F') || member.lastName === 'Contato' ? '' : member.lastName);
+        }
       }
 
       const emailToUpdate = result.detectedEmail !== undefined ? result.detectedEmail : member.email;
       const addressToUpdate = result.detectedAddress !== undefined ? result.detectedAddress : member.address;
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(members)
-          .set({
-            firstName: updatedFirstName,
-            lastName: updatedLastName,
-            email: emailToUpdate,
-            address: addressToUpdate,
-            phone: member.phone || cleanPhone,
-            status: 'ACTIVE',
-            deletedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
-      });
+      await db
+        .update(members)
+        .set({
+          firstName: updatedFirstName,
+          lastName: updatedLastName,
+          email: emailToUpdate,
+          address: addressToUpdate,
+          phone: member.phone || cleanPhone,
+          status: 'ACTIVE',
+          deletedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, member.id));
 
       await logSystemActivity({
         organizationId,
         action: 'UPDATE',
         entityType: 'MEMBER',
-        entityName: `Cadastro atualizado: ${updatedFirstName} ${updatedLastName}`,
+        entityName: `Cadastro atualizado: ${updatedFirstName} ${updatedLastName}`.trim(),
       });
 
       const displayName = `${updatedFirstName} ${updatedLastName}`.trim();
@@ -393,6 +437,6 @@ export async function handleIncomingMessageUseCase(params: {
     return { status: 'other_intent_ignored' };
   }
 
-  console.log(`[HANDLE_INCOMING_MSG] Sender ${sender} does not match any registered member.`);
+  console.warn(`[HANDLE_INCOMING_MSG] Sender ${sender} does not match any registered member.`);
   return { status: 'no_member_matched' };
 }

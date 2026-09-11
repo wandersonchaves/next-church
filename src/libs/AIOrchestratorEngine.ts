@@ -11,7 +11,9 @@ export type AIExtractionResult = {
 };
 
 function sanitizeName(name?: string | null): string | undefined {
-  if (!name) return undefined;
+  if (!name) {
+    return undefined;
+  }
   const clean = name
     .replace(/\[.*?\]/g, '') // Removes [mídia], [De: ...], etc.
     .replace(/[^\p{L}\s]/gu, '') // Keeps letters and spaces
@@ -22,11 +24,14 @@ function sanitizeName(name?: string | null): string | undefined {
 /**
  * Executes a text classification and extraction request using OpenRouter.
  * Supports fallback models if the primary model fails.
+ * @param messageContent
+ * @param memberName
+ * @param fullContext
  */
 export async function analyzeMessageWithAI(
   messageContent: string,
   memberName: string,
-  fullContext?: string
+  fullContext?: string,
 ): Promise<AIExtractionResult> {
   const apiKey = Env.OPENROUTER_API_KEY;
 
@@ -48,16 +53,16 @@ export async function analyzeMessageWithAI(
   
 Instruções de Classificação:
 1. "WRONG_NUMBER": O interlocutor avisa na ÚLTIMA mensagem que o número não pertence ao membro procurado ("não sou ele", "não me chamo [Nome]", "número errado", "esse número não é do ${memberName}", "não conheço").
-2. "OUTDATED_DATA": O interlocutor confirma que é o membro procurado, mas diz que alguma informação cadastral mudou/está incorreta ou fornece dados para atualização (ex: "meu e-mail mudou para...", "mudei de endereço", "meu e-mail é natalia@gmail.com").
-3. "CONFIRMED": O interlocutor confirma que é a pessoa procurada ou responde "sim" / "pode mandar" / "aceito" para continuar recebendo mensagens da igreja.
-4. "OTHER": Outros casos (saudações genéricas como "olá", dúvidas gerais, ou respostas curtas).
+2. "OUTDATED_DATA": O interlocutor corrige seu próprio nome, avisa que o nome cadastrado está incorreto ou desatualizado, ou informa que alguma informação cadastral mudou/está incorreta (ex: "me chamo Wanderson", "meu nome é Wanderson", "não sou Gabriel, sou o Wanderson", "meu nome está errado, sou Wanderson", "meu e-mail mudou para...", "mudei de endereço", "meu e-mail é natalia@gmail.com").
+3. "CONFIRMED": O interlocutor confirma que é a pessoa procurada ("sou eu", "sim, sou eu") ou responde "sim" / "pode mandar" / "aceito" para continuar recebendo mensagens da igreja.
+4. "OTHER": Outros casos (saudações genéricas como "olá", dúvidas gerais sobre culto/endereço sem alteração de cadastro, ou mensagens sem dados cadastrais).
 
 Extração de Entidades e Consentimento:
-- "detectedName": Nome próprio informado da NOVA pessoa (ex: "não me chamo Beatriz, sou o Carlos" -> "Carlos"). ATENÇÃO CRÍTICA: Se a pessoa apenas disser que NÃO é alguém (ex: "Não sou a Beatriz", "Não me chamo Natália", "Não é a Natália"), o "detectedName" DEVE ser null, pois o nome da nova pessoa NÃO foi informado ainda. NUNCA coloque o nome que foi rejeitado em detectedName.
-- "detectedEmail": E-mail informado na mensagem (ex: "nataliachaves@gmail.com").
+- "detectedName": Nome próprio informado da pessoa (ex: "me chamo Wanderson" -> "Wanderson", "meu nome é Wanderson Chaves" -> "Wanderson Chaves", "sou o Carlos" -> "Carlos", "não me chamo Beatriz, sou o Carlos" -> "Carlos"). ATENÇÃO CRÍTICA: Se a pessoa apenas disser que NÃO é alguém (ex: "Não sou a Beatriz", "Não me chamo Gabriel", "Não é a Natália"), o "detectedName" DEVE ser null, pois o nome da nova pessoa NÃO foi informado ainda. NUNCA coloque o nome que foi rejeitado em detectedName.
+- "detectedEmail": E-mail informado na mensagem (ex: "natalia@gmail.com").
 - "detectedAddress": Endereço informado na mensagem.
 - "detectedOptIn": true se a pessoa aceitar/autorizar receber mensagens da igreja (ex: "sim", "pode mandar", "aceito", "quero"), false se a pessoa recusar/não quiser receber mensagens da igreja (ex: "não", "não quero", "não envie mais", "remova meu número", "sou de outra igreja e não quero"), ou null se não respondeu sobre consentimento.
-- "isDifferentPerson": true se a intenção for WRONG_NUMBER ou se o nome informado for diferente do membro procurado, caso contrário false.
+- "isDifferentPerson": true se a intenção for WRONG_NUMBER ou se a pessoa informar explicitamente que o número pertence a outra pessoa diferente de "${memberName}", caso contrário false.
 - "rawDetails": Detalhes extras ou resumo da mensagem.
 
 Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem formatação markdown (sem \`\`\`json) e sem explicações:
@@ -77,11 +82,11 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
 
   for (const model of models) {
     try {
-      console.log(`[AI_ORCHESTRATOR] Attempting classification with model: ${model}`);
+      console.warn(`[AI_ORCHESTRATOR] Attempting classification with model: ${model}`);
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://github.com/wandersonchaves/next-church',
           'X-Title': 'Next Church CMS',
@@ -110,7 +115,7 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
         throw new Error('Empty message content received from OpenRouter');
       }
 
-      console.log(`[AI_ORCHESTRATOR] Response from ${model}: ${contentText}`);
+      console.warn(`[AI_ORCHESTRATOR] Response from ${model}: ${contentText}`);
 
       // Sanitiza possíveis markdown wrappers
       const cleanJsonStr = contentText
@@ -143,18 +148,19 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
 
 /**
  * Helper to extract person name from a message without capturing stop words.
+ * @param text
  */
 function extractNameFromText(text: string): string | undefined {
   let clean = text.replace(/\[.*?\]/g, '').trim();
   const lower = clean.toLowerCase();
 
   // Pattern 1: "não me chamo X e sim Y" / "não sou X, sou Y"
-  const correctedMatch = lower.match(/(?:não|nao)\s+(?:me chamo|sou|é|e)\s+[^\s,]+,?\s*(?:e sim|sou a|sou o|sou|é a|é o|é|e|mas|aqui é|aqui e)\s+([a-zA-záàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]{2,40})/i);
+  const correctedMatch = lower.match(/(?:não|nao)\s+(?:me chamo|sou|é|e)\s+[^\s,]+,?\s*(?:e sim|sou a|sou o|sou|é a|é o|é|e|mas|aqui é|aqui e|me chamo|chamo-me)\s+([a-záàâãéèêíïóôõöúçñ\s]{2,40})/i);
   if (correctedMatch?.[1]) {
     clean = correctedMatch[1];
   } else {
-    // Pattern 2: "Meu nome é Nataly" / "Me chamo Nataly" / "Meu nome é somente Nataly Chaves"
-    const presentationMatch = clean.match(/(?:meu nome é|meu nome e|me chamo|chamo-me|chamo|aqui é|aqui e|sou a|sou o|sou)\s*(?:somente|apenas)?\s+([a-zA-záàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]{2,40})/i);
+    // Pattern 2: "Meu nome é Nataly" / "Me chamo Nataly" / "Meu nome é somente Nataly Chaves" / "Nome correto é X"
+    const presentationMatch = clean.match(/(?:meu nome correto é|meu nome correto e|nome correto é|nome correto e|meu nome certo é|meu nome certo e|nome certo é|nome certo e|meu nome está errado,?\s*(?:sou|é|me chamo)?|meu nome tá errado,?\s*(?:sou|é|me chamo)?|meu nome é|meu nome e|me chamo|chamo-me|chamo|aqui é|aqui e|sou a|sou o|sou)\s*(?:somente|apenas)?\s+([a-záàâãéèêíïóôõöúçñ\s]{2,40})/i);
     if (presentationMatch?.[1]) {
       clean = presentationMatch[1];
     }
@@ -162,17 +168,32 @@ function extractNameFromText(text: string): string | undefined {
 
   // Clean stop words and prefixes
   clean = clean
-    .replace(/(?:não|nao)\s+tem\s+.*$/i, '')
-    .replace(/^(?:meu\s+nome\s+é|meu\s+nome\s+e|me\s+chamo|chamo-me|chamo|sou\s+a|sou\s+o|sou|aqui\s+é|aqui\s+e|somente|apenas)\s+/i, '')
+    .replace(/(?:não|nao)\s+tem\s+(?:\S.*)?$/i, '')
+    .replace(/^(?:meu\s+nome\s+correto\s+é|meu\s+nome\s+correto\s+e|nome\s+correto\s+é|nome\s+correto\s+e|meu\s+nome\s+certo\s+é|meu\s+nome\s+certo\s+e|meu\s+nome\s+está\s+errado|meu\s+nome\s+tá\s+errado|meu\s+nome\s+é|meu\s+nome\s+e|me\s+chamo|chamo-me|chamo|sou\s+a|sou\s+o|sou|aqui\s+é|aqui\s+e|somente|apenas)\s+/i, '')
     .replace(/,?\s*(?:gostaria sim|gostaria|sim, pode|sim|pode mandar|aceito|quero|obrigado|obrigada).*/i, '')
     .trim();
 
   const isExcluded = [
-    'sim', 'não', 'nao', 'ok', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite',
-    'mídia', '[mídia]', 'me', 'somente', 'apenas', 'visitante', 'contato', 'novo'
+    'sim',
+    'não',
+    'nao',
+    'ok',
+    'olá',
+    'ola',
+    'bom dia',
+    'boa tarde',
+    'boa noite',
+    'mídia',
+    '[mídia]',
+    'me',
+    'somente',
+    'apenas',
+    'visitante',
+    'contato',
+    'novo',
   ].includes(clean.toLowerCase());
 
-  if (!isExcluded && /^[a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ\s]{2,40}$/.test(clean)) {
+  if (!isExcluded && /^[a-záàâãéèêíïóôõöúçñ\s]{2,40}$/i.test(clean)) {
     const parts = clean.split(/\s+/).filter(Boolean);
     const capitalized = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
     return sanitizeName(capitalized);
@@ -184,12 +205,14 @@ function extractNameFromText(text: string): string | undefined {
 /**
  * Fallback heurístico simples caso a API de IA falhe ou esteja desconfigurada.
  * Prioriza a última mensagem recebida para evitar que termos de conversas antigas contaminem a intenção.
+ * @param currentText
+ * @param _fullContext
  */
-function ruleBasedAnalysis(currentText: string, fullContext?: string): AIExtractionResult {
+function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtractionResult {
   const cleanCurrent = currentText.replace(/\[.*?\]/g, '').trim();
   const normalizedCurrent = cleanCurrent.toLowerCase();
 
-  const emailMatch = cleanCurrent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i);
+  const emailMatch = cleanCurrent.match(/[\w.%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
   const extractedEmail = emailMatch ? emailMatch[0] : undefined;
 
   // 1. Confirmação explícita de opt-in na mensagem atual ("sim, gostaria de receber", "pode mandar", "sim", "aceito")
@@ -216,12 +239,12 @@ function ruleBasedAnalysis(currentText: string, fullContext?: string): AIExtract
   ];
 
   const isConfirmation = confirmPhrases.some(kw =>
-    normalizedCurrent === kw ||
-    normalizedCurrent.startsWith(`${kw} `) ||
-    normalizedCurrent.endsWith(` ${kw}`) ||
-    normalizedCurrent.includes('gostaria de receber') ||
-    normalizedCurrent.includes('gostaria sim') ||
-    normalizedCurrent.includes('pode mandar')
+    normalizedCurrent === kw
+    || normalizedCurrent.startsWith(`${kw} `)
+    || normalizedCurrent.endsWith(` ${kw}`)
+    || normalizedCurrent.includes('gostaria de receber')
+    || normalizedCurrent.includes('gostaria sim')
+    || normalizedCurrent.includes('pode mandar'),
   );
 
   if (isConfirmation) {
@@ -254,11 +277,28 @@ function ruleBasedAnalysis(currentText: string, fullContext?: string): AIExtract
 
   // 4. Aviso de número errado ("não me chamo", "não sou", "número errado", "não tem...")
   const wrongKeywords = [
-    'não sou', 'nao sou', 'não me chamo', 'nao me chamo',
-    'numero errado', 'número errado', 'não é ele', 'nao e ele',
-    'não é ela', 'nao e ela', 'não conhece', 'nao conhece',
-    'não sei quem', 'nao sei quem', 'desconheço', 'desconheco',
-    'outro dono', 'engano', 'nao tem', 'não tem', 'não moro', 'nao moro',
+    'não sou',
+    'nao sou',
+    'não me chamo',
+    'nao me chamo',
+    'numero errado',
+    'número errado',
+    'não é ele',
+    'nao e ele',
+    'não é ela',
+    'nao e ela',
+    'não conhece',
+    'nao conhece',
+    'não sei quem',
+    'nao sei quem',
+    'desconheço',
+    'desconheco',
+    'outro dono',
+    'engano',
+    'nao tem',
+    'não tem',
+    'não moro',
+    'nao moro',
   ];
 
   const hasWrongKeyword = wrongKeywords.some(kw => normalizedCurrent.includes(kw));
@@ -305,9 +345,20 @@ function ruleBasedAnalysis(currentText: string, fullContext?: string): AIExtract
 
   // 7. Palavras-chave de atualização
   const updateKeywords = [
-    'meu email', 'meu e-mail', 'mudei de', 'mudou',
-    'endereço novo', 'endereco novo', 'atualizar', 'corrigir',
-    'meu nome é', 'meu nome e',
+    'meu email',
+    'meu e-mail',
+    'mudei de',
+    'mudou',
+    'endereço novo',
+    'endereco novo',
+    'atualizar',
+    'corrigir',
+    'meu nome é',
+    'meu nome e',
+    'me chamo',
+    'chamo-me',
+    'nome correto',
+    'nome certo',
   ];
 
   for (const kw of updateKeywords) {
@@ -330,4 +381,3 @@ function ruleBasedAnalysis(currentText: string, fullContext?: string): AIExtract
     rawDetails: 'Fallback default classification',
   };
 }
-

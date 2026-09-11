@@ -1,14 +1,15 @@
-
+import { revalidatePath } from 'next/cache';
 import { NextResponse } from 'next/server';
 import { inngest } from '@/libs/Inngest';
+import { handleIncomingMessageUseCase } from '@/libs/services/HandleIncomingMessageUseCase';
 import { NotificationService } from '@/libs/services/NotificationService';
-import { revalidatePath } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Evolution GO / Evolution API Webhook Handler
  * Optimized for performance: Validates, saves directly, and hands off to Inngest for AI processing.
+ * @param req
  */
 export async function POST(req: Request) {
   try {
@@ -49,24 +50,24 @@ export async function POST(req: Request) {
     const isQrEvent = normalizedEvent.includes('QR');
 
     if (!isMessageEvent && !isConnectionEvent && !isQrEvent) {
-      console.info(`[EVOLUTION_WEBHOOK] Ignored unsupported event: ${incomingEvent}`);
+      console.warn(`[EVOLUTION_WEBHOOK] Ignored unsupported event: ${incomingEvent}`);
       return NextResponse.json({ status: 'ignored', event: incomingEvent });
     }
 
     const isFromMe = Boolean(
-      messageData?.key?.fromMe ??
-      messageData?.Info?.IsFromMe ??
-      messageData?.fromMe ??
-      false
+      messageData?.key?.fromMe
+      ?? messageData?.Info?.IsFromMe
+      ?? messageData?.fromMe
+      ?? false,
     );
 
     const isGroup = Boolean(
-      messageData?.Info?.IsGroup ||
-      sender.includes('@g.us') ||
-      messageData?.key?.remoteJid?.includes('@g.us')
+      messageData?.Info?.IsGroup
+      || sender.includes('@g.us')
+      || messageData?.key?.remoteJid?.includes('@g.us'),
     );
 
-    console.info(`[EVOLUTION_WEBHOOK] Event: ${incomingEvent} | Sender: ${sender} | FromMe: ${isFromMe} | Group: ${isGroup}`);
+    console.warn(`[EVOLUTION_WEBHOOK] Event: ${incomingEvent} | Sender: ${sender} | FromMe: ${isFromMe} | Group: ${isGroup}`);
 
     // Smart Sanitization
     const sanitizedData = {
@@ -80,33 +81,50 @@ export async function POST(req: Request) {
     if (isMessageEvent && !isGroup && !isFromMe) {
       const msg = messageData?.message || messageData?.Message;
 
-      const content = msg?.conversation ||
-                      msg?.extendedTextMessage?.text ||
-                      msg?.imageMessage?.caption ||
-                      msg?.videoMessage?.caption ||
-                      (typeof msg === 'string' ? msg : undefined) ||
-                      messageData?.content ||
-                      messageData?.text ||
-                      messageData?.Message;
+      const content = msg?.conversation
+        || msg?.extendedTextMessage?.text
+        || msg?.imageMessage?.caption
+        || msg?.videoMessage?.caption
+        || (typeof msg === 'string' ? msg : undefined)
+        || messageData?.content
+        || messageData?.text
+        || messageData?.Message;
 
       const externalId = messageData?.key?.id || messageData?.Info?.ID;
       const contextInfo = msg?.extendedTextMessage?.contextInfo || msg?.imageMessage?.contextInfo || msg?.videoMessage?.contextInfo;
       const parentExternalId = contextInfo?.stanzaId || contextInfo?.quotedMessage?.key?.id;
 
       if (content && sender) {
-        console.info(`[EVOLUTION_WEBHOOK] Incoming user message from ${sender}: "${String(content).slice(0, 100)}"`);
+        console.warn(`[EVOLUTION_WEBHOOK] Incoming user message from ${sender}: "${String(content).slice(0, 100)}"`);
 
-        await NotificationService.saveIncomingMessage({
+        const saveResult = await NotificationService.saveIncomingMessage({
           sender: String(sender),
           content: String(content),
           instanceId: String(body.instanceId || body.instance || ''),
           instanceName: String(body.instanceName || body.instance || ''),
           externalId: String(externalId || ''),
           parentExternalId: String(parentExternalId || ''),
-        }).catch(e => console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e));
+        }).catch((e) => {
+          console.error('[WEBHOOK_DIRECT_SAVE_ERROR]', e);
+          return null;
+        });
 
-        // Envia o evento para processamento de IA/Debounce
-        console.info(`[EVOLUTION_WEBHOOK] Dispatching whatsapp/message.received for AI analysis to Inngest...`);
+        const organizationId = saveResult?.organizationId;
+
+        // Dispara análise e correção com IA diretamente de forma assíncrona (não bloqueia resposta HTTP)
+        if (organizationId && !saveResult?.duplicate) {
+          console.warn(`[EVOLUTION_WEBHOOK] Triggering direct AI analysis for ${sender} (Org: ${organizationId})...`);
+          void handleIncomingMessageUseCase({
+            sender: String(sender),
+            content: String(content),
+            organizationId,
+          }).catch((err) => {
+            console.error('[WEBHOOK_DIRECT_AI_HANDLER_ERROR]', err);
+          });
+        }
+
+        // Envia também para o Inngest para redundância e processamentos em segundo plano
+        console.warn(`[EVOLUTION_WEBHOOK] Dispatching whatsapp/message.received for AI analysis to Inngest...`);
         await inngest.send({
           name: 'whatsapp/message.received',
           data: {
@@ -141,4 +159,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
