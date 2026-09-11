@@ -1,6 +1,7 @@
-import type { Meta, StoryObj } from '@storybook/nextjs-vite';
+import type { Meta, StoryObj } from '@storybook/react';
+import type * as React from 'react';
 import { NextIntlClientProvider } from 'next-intl';
-import messages from '@/locales/en.json';
+import messages from '../locales/en.json';
 import { BaseTemplate } from './BaseTemplate';
 
 const meta = {
@@ -10,7 +11,7 @@ const meta = {
     layout: 'fullscreen',
   },
   decorators: [
-    Story => (
+    (Story: React.ComponentType) => (
       <NextIntlClientProvider locale="en" messages={messages}>
         <Story />
       </NextIntlClientProvider>

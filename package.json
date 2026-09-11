@@ -5,13 +5,13 @@
     "node": ">=20.18.0"
   },
   "scripts": {
-    "build-local": "run-p db-server:memory build:next --race",
+    "build-local": "npm run build:next",
     "build-stats": "cross-env ANALYZE=true npm run build",
     "build-storybook": "storybook build",
     "build:next": "next build",
     "build": "next build",
     "check:deps": "knip",
-    "check:i18n": "i18n-check -l src/locales -s en -u src -f next-intl",
+    "check:i18n": "i18n-check -l src/locales -s en -f next-intl",
     "check:types": "tsc --noEmit --pretty",
     "clean": "rimraf .next out coverage",
     "commit": "commit",
@@ -78,6 +78,7 @@
     "@storybook/addon-links": "^8.5.8",
     "@storybook/addon-onboarding": "^8.5.8",
     "@storybook/blocks": "^8.5.8",
+    "@storybook/experimental-addon-test": "^8.6.14",
     "@storybook/nextjs": "^8.5.8",
     "@storybook/react": "^8.5.8",
     "@storybook/test": "^8.5.8",

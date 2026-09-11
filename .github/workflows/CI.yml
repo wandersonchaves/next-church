@@ -187,7 +187,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' && secrets.CROWDIN_PROJECT_ID != '' && secrets.CROWDIN_PERSONAL_TOKEN != '' }}
 
     steps:
       - uses: actions/checkout@v6

@@ -12,6 +12,7 @@ jobs:
     name: Synchronize with Crowdin
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: ${{ secrets.CROWDIN_PROJECT_ID != '' && secrets.CROWDIN_PERSONAL_TOKEN != '' }}
 
     steps:
       - uses: actions/checkout@v6

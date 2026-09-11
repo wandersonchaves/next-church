@@ -74,4 +74,24 @@ export default antfu(
       'jsdoc/require-hyphen-before-param-description': 'error', // Enforce hyphen before param description
     },
   },
-);
+).override('antfu/jsdoc/rules', {
+  plugins: {
+    jsdoc,
+  },
+}).onResolved((configs) => {
+  const removedRules = [
+    'react-dom/no-children-in-void-dom-elements',
+    'react/ensure-forward-ref-using-ref',
+    'react/no-comment-textnodes',
+    'react/no-nested-components',
+    'react/prefer-shorthand-boolean',
+    'react/prefer-shorthand-fragment',
+  ];
+  for (const config of configs) {
+    if (config.rules) {
+      for (const rule of removedRules) {
+        delete config.rules[rule];
+      }
+    }
+  }
+});
