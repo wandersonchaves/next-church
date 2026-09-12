@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { members, notificationLogs } from '../../models/Schema';
+import { memberMinistries, members, ministries, notificationLogs } from '../../models/Schema';
 import { analyzeMessageWithAI } from '../AIOrchestratorEngine';
 import { db } from '../DB';
 import { handleIncomingMessageUseCase } from './HandleIncomingMessageUseCase';
@@ -1115,6 +1115,151 @@ describe('handleIncomingMessageUseCase', () => {
 
       await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
       await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('directly updates complementary data (email, address) for active member without triggering AWAITING_UPDATE', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedEmail: 'wanderson@test.com',
+        detectedAddress: 'Rua Ferroviaria, 8400',
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Rua Ferroviaria, 8400 e email wanderson@test.com',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_updated_direct');
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.status).toBe('ACTIVE');
+      expect(updatedMember?.email).toBe('wanderson@test.com');
+      expect(updatedMember?.address).toBe('Rua Ferroviaria, 8400');
+
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('Dados atualizados com sucesso no seu cadastro! ✅'),
+        }),
+      );
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('directly updates generation slot (1-12) for active member without triggering AWAITING_UPDATE', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OTHER',
+        detectedGeneration: 3,
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Sou da Geração 3',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_updated_direct');
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.status).toBe('ACTIVE');
+      expect(updatedMember?.generationSlot).toBe(3);
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('directly links active member to ministry as VOLUNTÁRIO within tenant organization', async () => {
+      const [testMinistry] = await db
+        .insert(ministries)
+        .values({
+          organizationId: testOrgId,
+          name: 'Ministério de Louvor',
+        })
+        .returning();
+
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OTHER',
+        detectedMinistries: [{ name: 'Louvor', action: 'ADD' }],
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Participo do Louvor',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_updated_direct');
+
+      const memberMin = await db.query.memberMinistries.findFirst({
+        where: eq(memberMinistries.memberId, testMember.id),
+      });
+
+      expect(memberMin).toBeDefined();
+      expect(memberMin?.ministryId).toBe(testMinistry.id);
+      expect(memberMin?.role).toBe('VOLUNTÁRIO');
+
+      await db.delete(memberMinistries).where(eq(memberMinistries.memberId, testMember.id));
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+      await db.delete(ministries).where(eq(ministries.id, testMinistry.id));
     });
   });
 });

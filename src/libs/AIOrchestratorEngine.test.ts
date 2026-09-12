@@ -115,6 +115,51 @@ describe('AIOrchestratorEngine', () => {
       expect(result.detectedName).toBe('Carlos');
       expect(result.detectedOptIn).toBeNull();
     });
+
+    it('does not extract name on negated name with leading words "Mas nao me chamo Wanderson"', async () => {
+      const result = await analyzeMessageWithAI('Mas nao me chamo Wanderson', 'Wanderson');
+
+      expect(result.intent).toBe('WRONG_NUMBER');
+      expect(result.detectedName).toBeUndefined();
+      expect(result.isDifferentPerson).toBe(true);
+    });
+
+    it('extracts street address for "Rua Ferroviaria, 8400"', async () => {
+      const result = await analyzeMessageWithAI('Rua Ferroviaria, 8400', 'Wanderson');
+
+      expect(result.detectedAddress).toBe('Rua Ferroviaria, 8400');
+    });
+
+    it('extracts generation slot for "Geração 3" and "G12", ignores out of bounds', async () => {
+      const res1 = await analyzeMessageWithAI('Sou da Geração 3', 'Wanderson');
+
+      expect(res1.detectedGeneration).toBe(3);
+
+      const res2 = await analyzeMessageWithAI('Faço parte da G12', 'Wanderson');
+
+      expect(res2.detectedGeneration).toBe(12);
+
+      const res3 = await analyzeMessageWithAI('Geração 15', 'Wanderson');
+
+      expect(res3.detectedGeneration).toBeUndefined();
+    });
+
+    it('extracts ministry actions for adding and removing ministries', async () => {
+      const resAdd = await analyzeMessageWithAI('Participo do Louvor e Mídia', 'Wanderson');
+
+      expect(resAdd.detectedMinistries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'Louvor & Adoração', action: 'ADD' }),
+          expect.objectContaining({ name: 'Mídia & Produção', action: 'ADD' }),
+        ]),
+      );
+
+      const resRemove = await analyzeMessageWithAI('Não participo mais da Intercessão', 'Wanderson');
+
+      expect(resRemove.detectedMinistries).toEqual([
+        { name: 'Intercessão', action: 'REMOVE' },
+      ]);
+    });
   });
 
   describe('AI post-processing safety guards', () => {

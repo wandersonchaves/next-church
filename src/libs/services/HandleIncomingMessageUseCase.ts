@@ -3,7 +3,7 @@ import { analyzeMessageWithAI, extractNameFromText, isInvalidName } from '@/libs
 import { db } from '@/libs/DB';
 import { NotificationService } from '@/libs/services/NotificationService';
 import { WhatsAppService } from '@/libs/services/WhatsAppService';
-import { auditLogs, members, notificationLogs } from '@/models/Schema';
+import { auditLogs, memberMinistries, members, ministries, notificationLogs } from '@/models/Schema';
 
 /**
  * Logs a system-level activity to audit logs since Clerk's auth() is unavailable in background tasks.
@@ -138,18 +138,28 @@ export function isDataContestation(text: string): boolean {
  * @param params.name - Proposed member name.
  * @param params.email - Proposed member email.
  * @param params.address - Proposed member address.
+ * @param params.generation - Proposed member generation slot.
+ * @param params.ministries - Proposed member ministries.
+ * @param params.isApology - Whether to prefix with apologies (true for wrong number/negation).
  * @returns Formatted prompt string for WhatsApp.
  */
 function buildConfirmationPrompt(params: {
   name?: string;
   email?: string;
   address?: string;
+  generation?: number;
+  ministries?: string[];
+  isApology?: boolean;
 }): string {
-  const lines: string[] = [
-    'Pedimos sinceras desculpas pelo engano! 🙏',
-    '',
-    'Identificamos a seguinte solicitação de atualização no cadastro:',
-  ];
+  const lines: string[] = [];
+
+  if (params.isApology) {
+    lines.push('Pedimos sinceras desculpas pelo engano! 🙏');
+    lines.push('');
+    lines.push('Identificamos a seguinte solicitação de atualização no cadastro:');
+  } else {
+    lines.push('Identificamos a seguinte solicitação de atualização no cadastro:');
+  }
 
   if (params.name) {
     lines.push(`👤 *Nome:* ${params.name}`);
@@ -159,6 +169,12 @@ function buildConfirmationPrompt(params: {
   }
   if (params.address) {
     lines.push(`📍 *Endereço:* ${params.address}`);
+  }
+  if (params.generation) {
+    lines.push(`👥 *Geração:* Geração ${params.generation}`);
+  }
+  if (params.ministries && params.ministries.length > 0) {
+    lines.push(`🏛️ *Ministérios:* ${params.ministries.join(', ')}`);
   }
 
   lines.push('');
@@ -179,10 +195,14 @@ function extractPendingDataFromPrompt(content: string): {
   pendingName?: string;
   pendingEmail?: string;
   pendingAddress?: string;
+  pendingGeneration?: number;
+  pendingMinistries?: string[];
 } {
   let pendingName: string | undefined;
   let pendingEmail: string | undefined;
   let pendingAddress: string | undefined;
+  let pendingGeneration: number | undefined;
+  let pendingMinistries: string[] | undefined;
 
   const nameMatch = content.match(/👤\s*\*Nome:\*\s*([^\n]+)/iu);
   if (nameMatch?.[1]) {
@@ -202,7 +222,26 @@ function extractPendingDataFromPrompt(content: string): {
     pendingAddress = addressMatch[1].trim();
   }
 
-  return { pendingName, pendingEmail, pendingAddress };
+  const genMatch = content.match(/👥\s*\*Geração:\*\s*Geração\s*(\d+)/iu);
+  if (genMatch?.[1]) {
+    const slot = Number.parseInt(genMatch[1], 10);
+    if (slot >= 1 && slot <= 12) {
+      pendingGeneration = slot;
+    }
+  }
+
+  const minMatch = content.match(/🏛️\s*\*Ministérios:\*\s*([^\n]+)/iu);
+  if (minMatch?.[1]) {
+    const list = minMatch[1]
+      .split(',')
+      .map(m => m.trim())
+      .filter(Boolean);
+    if (list.length > 0) {
+      pendingMinistries = list;
+    }
+  }
+
+  return { pendingName, pendingEmail, pendingAddress, pendingGeneration, pendingMinistries };
 }
 
 /**
@@ -213,12 +252,20 @@ function extractPendingDataFromLogs(logs: Array<{ content: string; type: string 
   pendingName?: string;
   pendingEmail?: string;
   pendingAddress?: string;
+  pendingGeneration?: number;
+  pendingMinistries?: string[];
 } {
   for (let i = logs.length - 1; i >= 0; i--) {
     const log = logs[i];
     if (log && log.type === 'WHATSAPP_OUTGOING') {
       const parsed = extractPendingDataFromPrompt(log.content);
-      if (parsed.pendingName || parsed.pendingEmail || parsed.pendingAddress) {
+      if (
+        parsed.pendingName
+        || parsed.pendingEmail
+        || parsed.pendingAddress
+        || parsed.pendingGeneration
+        || parsed.pendingMinistries
+      ) {
         return parsed;
       }
     }
@@ -235,6 +282,75 @@ function extractPendingDataFromLogs(logs: Array<{ content: string; type: string 
   }
 
   return {};
+}
+
+/**
+ * Safely associates or disassociates a member with ministries belonging to their organization.
+ * Strictly scoped to the organization and defaults role to 'VOLUNTÁRIO'.
+ * @param params - Configuration object.
+ * @param params.memberId - Unique member identifier.
+ * @param params.organizationId - Tenant organization ID.
+ * @param params.ministryActions - List of ministries and actions ('ADD' | 'REMOVE').
+ * @returns Array of affected ministry names.
+ */
+async function syncMemberMinistries(params: {
+  memberId: string;
+  organizationId: string;
+  ministryActions: Array<{ name: string; action: 'ADD' | 'REMOVE' }>;
+}): Promise<string[]> {
+  const updatedMinistries: string[] = [];
+
+  const orgMinistries = await db
+    .select({ id: ministries.id, name: ministries.name })
+    .from(ministries)
+    .where(eq(ministries.organizationId, params.organizationId));
+
+  for (const actionItem of params.ministryActions) {
+    const normalizedTarget = actionItem.name.trim().toLowerCase();
+    if (!normalizedTarget) {
+      continue;
+    }
+
+    const matched = orgMinistries.find((m) => {
+      const dbName = m.name.toLowerCase();
+      return dbName.includes(normalizedTarget) || normalizedTarget.includes(dbName);
+    });
+
+    if (!matched) {
+      continue;
+    }
+
+    if (actionItem.action === 'ADD') {
+      const existing = await db.query.memberMinistries.findFirst({
+        where: and(
+          eq(memberMinistries.memberId, params.memberId),
+          eq(memberMinistries.ministryId, matched.id),
+        ),
+      });
+
+      if (!existing) {
+        await db.insert(memberMinistries).values({
+          memberId: params.memberId,
+          ministryId: matched.id,
+          role: 'VOLUNTÁRIO',
+          joinedAt: new Date(),
+        });
+      }
+      updatedMinistries.push(matched.name);
+    } else if (actionItem.action === 'REMOVE') {
+      await db
+        .delete(memberMinistries)
+        .where(
+          and(
+            eq(memberMinistries.memberId, params.memberId),
+            eq(memberMinistries.ministryId, matched.id),
+          ),
+        );
+      updatedMinistries.push(`Removido(a) de ${matched.name}`);
+    }
+  }
+
+  return updatedMinistries;
 }
 
 /**
@@ -436,6 +552,7 @@ export async function handleIncomingMessageUseCase(params: {
 
         const finalEmail = pending.pendingEmail || member.email;
         const finalAddress = pending.pendingAddress || member.address;
+        const finalGeneration = pending.pendingGeneration ?? member.generationSlot;
 
         await db
           .update(members)
@@ -444,12 +561,24 @@ export async function handleIncomingMessageUseCase(params: {
             lastName: finalLastName,
             email: finalEmail,
             address: finalAddress,
+            generationSlot: finalGeneration,
             phone: member.phone || cleanPhone,
             status: 'ACTIVE',
             deletedAt: null,
             updatedAt: new Date(),
           })
           .where(eq(members.id, member.id));
+
+        const confirmedMinistries: string[] = [];
+        if (pending.pendingMinistries && pending.pendingMinistries.length > 0) {
+          const actions = pending.pendingMinistries.map(name => ({ name, action: 'ADD' as const }));
+          const synced = await syncMemberMinistries({
+            memberId: member.id,
+            organizationId,
+            ministryActions: actions,
+          });
+          confirmedMinistries.push(...synced);
+        }
 
         const displayName = `${finalFirstName} ${finalLastName}`.trim();
 
@@ -460,32 +589,66 @@ export async function handleIncomingMessageUseCase(params: {
           entityName: `Cadastro confirmado e ativado: ${displayName}`,
         });
 
-        const welcomeMessage = [
+        const welcomeLines = [
           `🙌 *Cadastro Atualizado e Confirmado!* Obrigado por nos ajudar a manter seus dados corretos.`,
           ``,
           `Confirmamos os seguintes dados no sistema:`,
           `👤 *Nome:* ${displayName}`,
           `📧 *E-mail:* ${finalEmail || 'Não informado'}`,
           `📍 *Endereço:* ${finalAddress || 'Não informado'}`,
-          ``,
-          `Seja muito bem-vindo(a)! Que Deus abençoe sua vida! ✨`,
-        ].join('\n');
+        ];
+
+        if (finalGeneration) {
+          welcomeLines.push(`👥 *Geração:* Geração ${finalGeneration}`);
+        }
+        if (confirmedMinistries.length > 0) {
+          welcomeLines.push(`🏛️ *Ministérios:* ${confirmedMinistries.join(', ')}`);
+        }
+
+        welcomeLines.push(``);
+
+        const missingFields: string[] = [];
+        if (!finalEmail) {
+          missingFields.push('e-mail');
+        }
+        if (!finalAddress) {
+          missingFields.push('endereço');
+        }
+        if (!finalGeneration) {
+          missingFields.push('geração');
+        }
+        if (missingFields.length > 0) {
+          welcomeLines.push(`💡 *Dica:* Quando quiser, você pode nos enviar seu ${missingFields.join(', ')} ou ministérios que participa para completar seu cadastro!`);
+          welcomeLines.push(``);
+        }
+
+        welcomeLines.push(`Seja muito bem-vindo(a)! Que Deus abençoe sua vida! ✨`);
 
         await sendAndLogWhatsAppMessage({
           phone: sender,
-          message: welcomeMessage,
+          message: welcomeLines.join('\n'),
           organizationId,
         });
 
         return { status: 'awaiting_update_confirmed_opt_in' };
       }
 
-      // 2.2 Se informou novos dados enquanto aguardava confirmação (ex: "Natalia Chaves", "Me chamo Wanderson")
-      if (result.detectedName || result.detectedEmail || result.detectedAddress) {
+      // 2.2 Se informou novos dados enquanto aguardava confirmação (ex: "Natalia Chaves", "Me chamo Wanderson", "Rua Ferroviaria, 8400", "Geração 3", "Louvor")
+      const candidateMinistries = result.detectedMinistries?.filter(m => m.action === 'ADD').map(m => m.name);
+      if (
+        result.detectedName
+        || result.detectedEmail
+        || result.detectedAddress
+        || result.detectedGeneration
+        || (candidateMinistries && candidateMinistries.length > 0)
+      ) {
         const confirmPrompt = buildConfirmationPrompt({
           name: result.detectedName,
           email: result.detectedEmail,
           address: result.detectedAddress,
+          generation: result.detectedGeneration,
+          ministries: candidateMinistries,
+          isApology: false,
         });
 
         await logSystemActivity({
@@ -509,7 +672,7 @@ export async function handleIncomingMessageUseCase(params: {
         const clarificationMsg = [
           'Pedimos sinceras desculpas pelo erro! 🙏',
           '',
-          'Como deveríamos registrar seu nome completo, e-mail ou endereço corretamente? Por favor, envie a informação correta para atualizarmos seu cadastro.',
+          'Como deveríamos registrar seu nome completo, e-mail, endereço, geração ou ministério corretamente? Por favor, envie a informação correta para atualizarmos seu cadastro.',
         ].join('\n');
 
         await logSystemActivity({
@@ -541,11 +704,22 @@ export async function handleIncomingMessageUseCase(params: {
         })
         .where(eq(members.id, member.id));
 
-      if (result.detectedName || result.detectedEmail || result.detectedAddress) {
+      const candidateMinistries = result.detectedMinistries?.filter(m => m.action === 'ADD').map(m => m.name);
+
+      if (
+        result.detectedName
+        || result.detectedEmail
+        || result.detectedAddress
+        || result.detectedGeneration
+        || (candidateMinistries && candidateMinistries.length > 0)
+      ) {
         const confirmPrompt = buildConfirmationPrompt({
           name: result.detectedName,
           email: result.detectedEmail,
           address: result.detectedAddress,
+          generation: result.detectedGeneration,
+          ministries: candidateMinistries,
+          isApology: true,
         });
 
         await logSystemActivity({
@@ -582,50 +756,15 @@ export async function handleIncomingMessageUseCase(params: {
       return { status: 'handled_wrong_number_awaiting_name' };
     }
 
-    // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro (OUTDATED_DATA ou correção de nome)
+    // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro
+    // 4.1: Mudança de Nome ou Identidade Diferente (ex: "Não me chamo Gabriel, sou Wanderson Chaves")
     const isNameDifferent = Boolean(
       result.detectedName
       && !isInvalidName(result.detectedName)
       && result.detectedName.trim().toLowerCase() !== member.firstName.trim().toLowerCase(),
     );
 
-    const hasDetailsToUpdate = Boolean(
-      result.detectedName
-      || result.detectedEmail
-      || result.detectedAddress,
-    );
-
-    if (result.intent === 'OUTDATED_DATA' || isNameDifferent) {
-      if (!hasDetailsToUpdate) {
-        await db
-          .update(members)
-          .set({
-            status: 'AWAITING_UPDATE',
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
-
-        await logSystemActivity({
-          organizationId,
-          action: 'UPDATE',
-          entityType: 'MEMBER',
-          entityName: `Status de ${memberFullName} alterado para AWAITING_UPDATE`,
-        });
-
-        const responseMsg = `Peço desculpas pelo transtorno! Qual seria o seu nome completo, e-mail ou endereço atualizado para que possamos corrigir no seu cadastro aqui?`;
-
-        await sendAndLogWhatsAppMessage({
-          phone: sender,
-          message: responseMsg,
-          organizationId,
-        });
-
-        return { status: 'awaiting_update_prompt_sent' };
-      }
-
-      // Se enviou detalhes (ex: "Não me chamo Gabriel, sou Wanderson Chaves", "Meu nome é Natalia"):
-      // Define status como AWAITING_UPDATE e envia solicitação de confirmação com Opt-In
-      // SEM alterar o nome ou dados no banco antes da confirmação do usuário!
+    if (isNameDifferent) {
       await db
         .update(members)
         .set({
@@ -640,13 +779,17 @@ export async function handleIncomingMessageUseCase(params: {
         organizationId,
         action: 'UPDATE',
         entityType: 'MEMBER',
-        entityName: `Aguardando confirmação para atualização de cadastro de ${memberFullName}`,
+        entityName: `Aguardando confirmação para atualizar nome de ${memberFullName} para ${result.detectedName}`,
       });
 
+      const candidateMinistries = result.detectedMinistries?.filter(m => m.action === 'ADD').map(m => m.name);
       const confirmPrompt = buildConfirmationPrompt({
         name: result.detectedName,
         email: result.detectedEmail,
         address: result.detectedAddress,
+        generation: result.detectedGeneration,
+        ministries: candidateMinistries,
+        isApology: false,
       });
 
       await sendAndLogWhatsAppMessage({
@@ -656,6 +799,118 @@ export async function handleIncomingMessageUseCase(params: {
       });
 
       return { status: 'member_data_corrected' };
+    }
+
+    // 4.2: Atualização Direta de Dados Complementares para Membro Ativo (E-mail, Endereço, Geração 1-12, Ministérios)
+    // Sem passar pelo ritual de AWAITING_UPDATE ou exigir "Sim/Não/Parar" se o membro já é ativo e seu nome não mudou!
+    const hasComplementaryData = Boolean(
+      result.detectedEmail
+      || result.detectedAddress
+      || (result.detectedGeneration && result.detectedGeneration >= 1 && result.detectedGeneration <= 12)
+      || (result.detectedMinistries && result.detectedMinistries.length > 0),
+    );
+
+    if (hasComplementaryData) {
+      const updatePayload: Partial<{
+        email: string;
+        address: string;
+        generationSlot: number;
+        updatedAt: Date;
+      }> = {
+        updatedAt: new Date(),
+      };
+
+      const updatedFieldsList: string[] = [];
+
+      if (result.detectedEmail) {
+        updatePayload.email = result.detectedEmail;
+        updatedFieldsList.push(`📧 *E-mail:* ${result.detectedEmail}`);
+      }
+
+      if (result.detectedAddress) {
+        updatePayload.address = result.detectedAddress;
+        updatedFieldsList.push(`📍 *Endereço:* ${result.detectedAddress}`);
+      }
+
+      // Validação estrita de Geração (apenas slots inteiros de 1 a 12)
+      if (
+        result.detectedGeneration
+        && Number.isInteger(result.detectedGeneration)
+        && result.detectedGeneration >= 1
+        && result.detectedGeneration <= 12
+      ) {
+        updatePayload.generationSlot = result.detectedGeneration;
+        updatedFieldsList.push(`👥 *Geração:* Geração ${result.detectedGeneration}`);
+      }
+
+      // Executa mutação no membro (apenas no próprio registro e tenant)
+      await db
+        .update(members)
+        .set(updatePayload)
+        .where(and(eq(members.id, member.id), eq(members.organizationId, organizationId)));
+
+      // Sincroniza ministérios se informados (apenas ministérios existentes do tenant, como VOLUNTÁRIO)
+      if (result.detectedMinistries && result.detectedMinistries.length > 0) {
+        const synced = await syncMemberMinistries({
+          memberId: member.id,
+          organizationId,
+          ministryActions: result.detectedMinistries,
+        });
+        for (const m of synced) {
+          updatedFieldsList.push(`🏛️ *Ministério:* ${m}`);
+        }
+      }
+
+      await logSystemActivity({
+        organizationId,
+        action: 'UPDATE',
+        entityType: 'MEMBER',
+        entityName: `Dados complementares atualizados diretamente para ${memberFullName}`,
+      });
+
+      const confirmationReply = [
+        `Dados atualizados com sucesso no seu cadastro! ✅`,
+        ``,
+        ...updatedFieldsList,
+        ``,
+        `Se precisar atualizar mais alguma informação, é só nos mandar por aqui! 🙏`,
+      ].join('\n');
+
+      await sendAndLogWhatsAppMessage({
+        phone: sender,
+        message: confirmationReply,
+        organizationId,
+      });
+
+      return { status: 'member_data_updated_direct' };
+    }
+
+    // 4.3: Mensagem indicando dados desatualizados mas sem nenhum dado identificado ainda
+    if (result.intent === 'OUTDATED_DATA') {
+      await db
+        .update(members)
+        .set({
+          status: 'AWAITING_UPDATE',
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, member.id));
+
+      await logSystemActivity({
+        organizationId,
+        action: 'UPDATE',
+        entityType: 'MEMBER',
+        entityName: `Status de ${memberFullName} alterado para AWAITING_UPDATE`,
+      });
+
+      const responseMsg = `Peço desculpas pelo transtorno! Qual seria o seu nome completo, e-mail ou endereço atualizado para que possamos corrigir no seu cadastro aqui?`;
+
+      await sendAndLogWhatsAppMessage({
+        phone: sender,
+        message: responseMsg,
+        organizationId,
+      });
+
+      return { status: 'awaiting_update_prompt_sent' };
     }
 
     // ✅ REGRA 5: Confirmação de Membro Ativo (CONFIRMED)

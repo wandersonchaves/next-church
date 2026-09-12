@@ -1,10 +1,17 @@
 import { Env } from '@/libs/Env';
 
+export type MinistryAction = {
+  name: string;
+  action: 'ADD' | 'REMOVE';
+};
+
 export type AIExtractionResult = {
   intent: 'WRONG_NUMBER' | 'OUTDATED_DATA' | 'CONFIRMED' | 'OTHER';
   detectedName?: string;
   detectedEmail?: string;
   detectedAddress?: string;
+  detectedGeneration?: number;
+  detectedMinistries?: MinistryAction[];
   detectedOptIn?: boolean | null;
   isDifferentPerson: boolean;
   rawDetails?: string;
@@ -248,14 +255,16 @@ export async function analyzeMessageWithAI(
   
 Instruções de Classificação:
 1. "WRONG_NUMBER": O interlocutor avisa na ÚLTIMA mensagem que o número não pertence ao membro procurado ("não sou ele", "não me chamo [Nome]", "número errado", "esse número não é do ${memberName}", "não conheço").
-2. "OUTDATED_DATA": O interlocutor corrige seu próprio nome, avisa que o nome cadastrado está incorreto ou desatualizado, contesta os dados informados (ex: "está errado", "não está certo", "não confirmo", ou "não" ao conferir os dados apresentados), ou informa que alguma informação cadastral mudou/está incorreta (ex: "me chamo Wanderson", "meu nome é Wanderson", "não sou Gabriel, sou o Wanderson", "meu nome está errado, sou Wanderson", "meu e-mail mudou para...", "mudei de endereço", "meu e-mail é natalia@gmail.com").
+2. "OUTDATED_DATA": O interlocutor corrige seu próprio nome, avisa que o nome cadastrado está incorreto ou desatualizado, contesta os dados informados (ex: "está errado", "não está certo", "não confirmo", ou "não" ao conferir os dados apresentados), ou informa que alguma informação cadastral mudou/está incorreta (ex: "me chamo Wanderson", "meu nome é Wanderson", "não sou Gabriel, sou o Wanderson", "meu nome está errado, sou Wanderson", "meu e-mail mudou para...", "mudei de endereço", "meu e-mail é natalia@gmail.com", "sou da geração 3", "participo do louvor").
 3. "CONFIRMED": O interlocutor confirma que é a pessoa procurada ("sou eu", "sim, sou eu") ou responde "sim" / "pode mandar" / "aceito" para continuar recebendo mensagens da igreja.
 4. "OTHER": Outros casos (saudações genéricas como "olá", dúvidas gerais sobre culto/endereço sem alteração de cadastro, ou mensagens sem dados cadastrais).
 
 Extração de Entidades e Consentimento:
-- "detectedName": Nome próprio informado da pessoa (ex: "me chamo Wanderson" -> "Wanderson", "meu nome é Wanderson Chaves" -> "Wanderson Chaves", "sou o Carlos" -> "Carlos", "não me chamo Beatriz, sou o Carlos" -> "Carlos", "não me chamo Gabriel, e sim Wanderson" -> "Wanderson"). ATENÇÃO CRÍTICA: Expressões religiosas, saudações, louvores e agradecimentos (como "Amém", "Amem", "Aleluia", "Glória a Deus", "Graças a Deus", "Deus abençoe", "Obrigado", "Paz do Senhor", "Recebo", "Tomo posse") NUNCA são nomes! Nesses casos "detectedName" DEVE ser null e a intenção é "OTHER". Se a pessoa apenas disser que NÃO é alguém (ex: "Não sou a Beatriz", "Não me chamo Gabriel", "Não é a Natália"), o "detectedName" DEVE ser null, pois o nome da nova pessoa NÃO foi informado ainda. NUNCA coloque o nome que foi rejeitado em detectedName.
+- "detectedName": Nome próprio informado da pessoa (ex: "me chamo Wanderson" -> "Wanderson", "meu nome é Wanderson Chaves" -> "Wanderson Chaves", "sou o Carlos" -> "Carlos", "não me chamo Beatriz, sou o Carlos" -> "Carlos", "não me chamo Gabriel, e sim Wanderson" -> "Wanderson"). ATENÇÃO CRÍTICA: Expressões religiosas, saudações, louvores e agradecimentos (como "Amém", "Amem", "Aleluia", "Glória a Deus", "Graças a Deus", "Deus abençoe", "Obrigado", "Paz do Senhor", "Recebo", "Tomo posse") NUNCA são nomes! Nesses casos "detectedName" DEVE ser null e a intenção é "OTHER". Se a pessoa apenas disser que NÃO é alguém (ex: "Não sou a Beatriz", "Não me chamo Gabriel", "Não é a Natália", "Mas não me chamo Wanderson"), o "detectedName" DEVE ser null, pois o nome da nova pessoa NÃO foi informado ainda. NUNCA coloque o nome que foi rejeitado em detectedName.
 - "detectedEmail": E-mail informado na mensagem (ex: "natalia@gmail.com").
-- "detectedAddress": Endereço informado na mensagem.
+- "detectedAddress": Endereço informado na mensagem (ex: "Rua Ferroviaria, 8400", "Av. Paulista, 1000").
+- "detectedGeneration": Número da geração no modelo G12 (inteiro de 1 a 12, ex: "Geração 3" -> 3, "G2" -> 2, "g12" -> 12). Se não informado ou inválido, null.
+- "detectedMinistries": Lista de ministérios mencionados na mensagem (ex: "sou do louvor" -> [{"name": "Louvor & Adoração", "action": "ADD"}], "saí da mídia" -> [{"name": "Mídia & Produção", "action": "REMOVE"}]). Se não informado, null.
 - "detectedOptIn": true se a pessoa aceitar/autorizar receber mensagens da igreja (ex: "sim", "pode mandar", "aceito", "quero"), false se a pessoa declarar explicitamente que NÃO quer receber mensagens da igreja (ex: "parar", "não quero receber", "não envie mais", "remova meu número", "cancele mensagens", "sair"), ou null se não for recusa de mensagens (ex: se disser "não" para os dados, se disser "está errado", ou se corrigir o nome como "não, sou Wanderson"). IMPORTANTE: Rejeição ou contestação de dados cadastrais (como "está errado", "não é esse", "não confirmo", "não, meu nome é X") NUNCA é opt-out de mensagens (detectedOptIn deve ser null nesses casos).
 - "isDifferentPerson": true se a intenção for WRONG_NUMBER ou se a pessoa informar explicitamente que o número pertence a outra pessoa diferente de "${memberName}", caso contrário false.
 - "rawDetails": Detalhes extras ou resumo da mensagem.
@@ -266,6 +275,8 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
   "detectedName": string | null,
   "detectedEmail": string | null,
   "detectedAddress": string | null,
+  "detectedGeneration": number | null,
+  "detectedMinistries": Array<{ "name": string, "action": "ADD" | "REMOVE" }> | null,
   "detectedOptIn": boolean | null,
   "isDifferentPerson": boolean,
   "rawDetails": string | null
@@ -334,7 +345,7 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
           }
         }
 
-        // Guarda 2: Se detectedName for o mesmo nome rejeitado ou o mesmo primeiro nome do membro procurado
+        // Guarda 2: Se detectedName for o mesmo primeiro nome do membro procurado ou se foi negado no texto
         if (cleanDetectedName) {
           const cleanDetectedLower = cleanDetectedName.toLowerCase();
           const memberFirst = memberName.trim().split(' ')[0]?.toLowerCase();
@@ -342,10 +353,13 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
             cleanDetectedName = undefined;
           }
 
-          // Se a mensagem for pura negação desse nome (ex: "Não me chamo Gabriel")
+          // Se a mensagem contiver negação desse nome (ex: "Mas não me chamo Wanderson", "Não sou o Wanderson")
           if (cleanDetectedName) {
-            const pureNegationRegex = new RegExp(`^(?:não|nao)\\s+(?:me chamo|sou|é|e)\\s+${cleanDetectedLower}$`, 'iu');
-            if (pureNegationRegex.test(messageContent.trim().toLowerCase())) {
+            const negatedNamePattern = new RegExp(
+              `(?:não|nao)\\s+(?:me chamo|sou|é|e|conheço|conheco|seria)\\s+(?:o\\s+|a\\s+)?${cleanDetectedLower}\\b`,
+              'iu',
+            );
+            if (negatedNamePattern.test(messageContent.toLowerCase())) {
               cleanDetectedName = undefined;
             }
           }
@@ -368,11 +382,30 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
           }
         }
 
+        // Extrações complementares seguras (endereço, geração, ministérios)
+        let detectedAddress = result.detectedAddress || undefined;
+        if (!detectedAddress) {
+          detectedAddress = extractAddressFromText(messageContent);
+        }
+
+        const detectedGeneration = (typeof result.detectedGeneration === 'number' && result.detectedGeneration >= 1 && result.detectedGeneration <= 12)
+          ? result.detectedGeneration
+          : extractGenerationFromText(messageContent);
+
+        let detectedMinistries: MinistryAction[] | undefined = (Array.isArray(result.detectedMinistries) && result.detectedMinistries.length > 0)
+          ? result.detectedMinistries
+          : extractMinistryActionsFromText(messageContent);
+        if (detectedMinistries && detectedMinistries.length === 0) {
+          detectedMinistries = undefined;
+        }
+
         return {
           intent: result.intent,
           detectedName: cleanDetectedName,
           detectedEmail: result.detectedEmail || undefined,
-          detectedAddress: result.detectedAddress || undefined,
+          detectedAddress,
+          detectedGeneration,
+          detectedMinistries,
           detectedOptIn: optIn,
           isDifferentPerson: Boolean(result.isDifferentPerson),
           rawDetails: result.rawDetails || undefined,
@@ -402,8 +435,10 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
   if (correctedMatch?.[2]) {
     clean = correctedMatch[2];
   } else {
-    // Pure negation check: if message is just saying "não me chamo X" or "não sou X", do NOT extract X as a name!
-    if (/^(?:não|nao)\s+(?:me chamo|sou|é|e)\s+\p{L}+(?:\s+\p{L}+)*$/iu.test(clean)) {
+    // Pure negation check: if message contains negation like "não me chamo X" / "não sou X" without positive correction
+    const hasNegation = /(?:^|\b)(?:mas\s+|e\s+|eu\s+|olá\s+|ola\s+|opa\s+|oi\s+)?(?:não|nao)\s+(?:me chamo|sou|é|e|seria)\s+(?:o\s+|a\s+)?\p{L}+/iu.test(lower);
+    const hasPositiveCorrection = /e\s+sim|mas\s+sim|sou\s+o|sou\s+a|me\s+chamo|chamo-me|meu\s+nome/iu.test(lower.replace(/(?:não|nao)\s+(?:me chamo|sou|é|e)/giu, ''));
+    if (hasNegation && !hasPositiveCorrection) {
       return undefined;
     }
 
@@ -437,6 +472,115 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
 }
 
 /**
+ * Extracts a candidate address from text using Brazilian street patterns or address prefixes.
+ * @param text - Message text.
+ * @returns Clean address string or undefined.
+ */
+export function extractAddressFromText(text: string): string | undefined {
+  const clean = text.replace(/\[.*?\]/g, '').trim();
+
+  // Pattern 1: explicit prefix "meu endereço é ...", "endereço: ...", "moro na/em ..."
+  const explicitMatch = clean.match(/(?:meu\s+endereço\s+(?:é|e)|endereço\s+(?:é|e)|endereço:|moro\s+na|moro\s+no|moro\s+em)\s+([^.\n]+)/iu);
+  if (explicitMatch?.[1]) {
+    const candidate = explicitMatch[1].trim();
+    if (candidate.length >= 5 && candidate.length <= 255) {
+      return candidate;
+    }
+  }
+
+  // Pattern 2: Street format (e.g. "Rua Ferroviaria, 8400", "Av. Paulista, 1000", "Quadra 10 Lote 5")
+  const streetMatch = clean.match(/\b(?:rua|r\.|av\.|avenida|travessa|tv\.|rodovia|alameda|praça|praca|quadra|qd\.|lote|lt\.|estrada|vila|bairro)\s+[^,\n]+(?:,[\w\s/-]+)?/iu);
+  if (streetMatch?.[0]) {
+    const candidate = streetMatch[0].trim();
+    if (candidate.length >= 5 && candidate.length <= 255) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Extracts G12 generation slot (1 to 12) from text.
+ * @param text - Message text.
+ * @returns Generation slot integer between 1 and 12, or undefined.
+ */
+export function extractGenerationFromText(text: string): number | undefined {
+  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+
+  // Match "geração 3", "geracao 12", "g3", "g12", "geração: 4", "sou da g5"
+  const match = clean.match(/\b(?:geração|geracao|g)(?:\s*:\s*|\s+)?([1-9]|1[0-2])\b/iu);
+  if (match?.[1]) {
+    const slot = Number.parseInt(match[1], 10);
+    if (slot >= 1 && slot <= 12) {
+      return slot;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Extracts church ministries and participation actions from text.
+ * @param text - Message text.
+ * @returns Array of detected ministry actions.
+ */
+export function extractMinistryActionsFromText(text: string): MinistryAction[] {
+  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+  const results: MinistryAction[] = [];
+
+  const removeKeywords = [
+    'saí do',
+    'sai do',
+    'saí da',
+    'sai da',
+    'não participo mais do',
+    'nao participo mais do',
+    'não participo mais da',
+    'nao participo mais da',
+    'remover do',
+    'remover da',
+    'sair do',
+    'sair da',
+  ];
+  const isRemove = removeKeywords.some(kw => clean.includes(kw));
+  const action: 'ADD' | 'REMOVE' = isRemove ? 'REMOVE' : 'ADD';
+
+  // Common church ministries
+  const ministryKeywords = [
+    { key: 'louvor', name: 'Louvor & Adoração' },
+    { key: 'mídia', name: 'Mídia & Produção' },
+    { key: 'midia', name: 'Mídia & Produção' },
+    { key: 'kids', name: 'TelePaz Filadélfia Kids' },
+    { key: 'filadélfia kids', name: 'TelePaz Filadélfia Kids' },
+    { key: 'filadelfia kids', name: 'TelePaz Filadélfia Kids' },
+    { key: 'consolidação', name: 'Consolidação' },
+    { key: 'consolidacao', name: 'Consolidação' },
+    { key: 'intercessão', name: 'Intercessão' },
+    { key: 'intercessao', name: 'Intercessão' },
+    { key: 'apoio', name: 'Apoio & Logística' },
+    { key: 'logística', name: 'Apoio & Logística' },
+    { key: 'logistica', name: 'Apoio & Logística' },
+    { key: 'recepção', name: 'Recepção' },
+    { key: 'recepcao', name: 'Recepção' },
+    { key: 'dança', name: 'Dança' },
+    { key: 'danca', name: 'Dança' },
+    { key: 'teatro', name: 'Teatro' },
+    { key: 'diaconato', name: 'Diaconato' },
+  ];
+
+  for (const item of ministryKeywords) {
+    if (clean.includes(item.key)) {
+      if (!results.some(r => r.name === item.name)) {
+        results.push({ name: item.name, action });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
  * Fallback heurístico simples caso a API de IA falhe ou esteja desconfigurada.
  * Prioriza a última mensagem recebida para evitar que termos de conversas antigas contaminem a intenção.
  * @param currentText - Current message content.
@@ -448,6 +592,9 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
 
   const emailMatch = cleanCurrent.match(/[\w.%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
   const extractedEmail = emailMatch ? emailMatch[0] : undefined;
+  const extractedAddress = extractAddressFromText(cleanCurrent);
+  const extractedGeneration = extractGenerationFromText(cleanCurrent);
+  const extractedMinistries = extractMinistryActionsFromText(cleanCurrent);
 
   // 1. Confirmação explícita de opt-in na mensagem atual ("sim, gostaria de receber", "pode mandar", "sim", "aceito")
   const confirmPhrases = [
@@ -584,6 +731,9 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
       intent: 'OUTDATED_DATA',
       detectedName: extractedName,
       detectedEmail: extractedEmail,
+      detectedAddress: extractedAddress,
+      detectedGeneration: extractedGeneration,
+      detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
       detectedOptIn: null,
       isDifferentPerson: false,
       rawDetails: 'Contested data or rejected without opting out of communication',
@@ -645,15 +795,18 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     };
   }
 
-  // 6. Se enviou e-mail
-  if (extractedEmail) {
+  // 6. Se enviou e-mail, endereço, geração ou ministério
+  if (extractedEmail || extractedAddress || extractedGeneration || extractedMinistries.length > 0) {
     return {
       intent: 'OUTDATED_DATA',
       detectedEmail: extractedEmail,
+      detectedAddress: extractedAddress,
+      detectedGeneration: extractedGeneration,
+      detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
       detectedName: extractedName,
       detectedOptIn: null,
       isDifferentPerson: false,
-      rawDetails: 'Extracted email via rule-based analysis',
+      rawDetails: 'Extracted registration data via rule-based analysis',
     };
   }
 
