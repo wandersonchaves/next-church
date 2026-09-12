@@ -11,6 +11,7 @@ export type AIExtractionResult = {
   detectedEmail?: string;
   detectedAddress?: string;
   detectedGeneration?: number;
+  detectedAttemptedOutOfRangeGeneration?: number;
   detectedMinistries?: MinistryAction[];
   detectedOptIn?: boolean | null;
   isDifferentPerson: boolean;
@@ -121,6 +122,8 @@ export const NON_NAME_WORDS = new Set([
   'ministério',
   'geracao',
   'geração',
+  'frente',
+  'frentes',
   'g12',
   'telepaz',
   'filadelfia',
@@ -292,7 +295,7 @@ Extração de Entidades e Consentimento:
 - "detectedName": Nome próprio informado da pessoa (ex: "me chamo Wanderson" -> "Wanderson", "meu nome é Wanderson Chaves" -> "Wanderson Chaves", "sou o Carlos" -> "Carlos", "não me chamo Beatriz, sou o Carlos" -> "Carlos", "não me chamo Gabriel, e sim Wanderson" -> "Wanderson"). ATENÇÃO CRÍTICA: Expressões religiosas, saudações, louvores e agradecimentos (como "Amém", "Amem", "Aleluia", "Glória a Deus", "Graças a Deus", "Deus abençoe", "Obrigado", "Paz do Senhor", "Recebo", "Tomo posse") NUNCA são nomes! Nesses casos "detectedName" DEVE ser null e a intenção é "OTHER". Se a pessoa apenas disser que NÃO é alguém (ex: "Não sou a Beatriz", "Não me chamo Gabriel", "Não é a Natália", "Mas não me chamo Wanderson"), o "detectedName" DEVE ser null, pois o nome da nova pessoa NÃO foi informado ainda. NUNCA coloque o nome que foi rejeitado em detectedName.
 - "detectedEmail": E-mail informado na mensagem (ex: "natalia@gmail.com").
 - "detectedAddress": Endereço informado na mensagem (ex: "Rua Ferroviaria, 8400", "Av. Paulista, 1000").
-- "detectedGeneration": Número da geração no modelo G12 (inteiro de 1 a 12, ex: "Geração 3" -> 3, "G2" -> 2, "g12" -> 12). Se não informado ou inválido, null.
+- "detectedGeneration": Número da geração ou frente no modelo G12 (inteiro estritamente de 1 a 12, ex: "Geração 3" -> 3, "G2" -> 2, "g12" -> 12, "F3" -> 3, "F12" -> 12, "Geração F3" -> 3, "Frente 4" -> 4). Se não informado ou fora de 1 a 12 (ex: F13), retorne null.
 - "detectedMinistries": Lista de ministérios mencionados na mensagem (ex: "sou do louvor" -> [{"name": "Louvor & Adoração", "action": "ADD"}], "saí da mídia" -> [{"name": "Mídia & Produção", "action": "REMOVE"}]). Se não informado, null.
 - "detectedOptIn": true se a pessoa aceitar/autorizar receber mensagens da igreja (ex: "sim", "pode mandar", "aceito", "quero"), false se a pessoa declarar explicitamente que NÃO quer receber mensagens da igreja (ex: "parar", "não quero receber", "não envie mais", "remova meu número", "cancele mensagens", "sair"), ou null se não for recusa de mensagens (ex: se disser "não" para os dados, se disser "está errado", ou se corrigir o nome como "não, sou Wanderson"). IMPORTANTE: Rejeição ou contestação de dados cadastrais (como "está errado", "não é esse", "não confirmo", "não, meu nome é X") NUNCA é opt-out de mensagens (detectedOptIn deve ser null nesses casos).
 - "isDifferentPerson": true se a intenção for WRONG_NUMBER ou se a pessoa informar explicitamente que o número pertence a outra pessoa diferente de "${memberName}", caso contrário false.
@@ -423,6 +426,12 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
           ? result.detectedGeneration
           : extractGenerationFromText(messageContent);
 
+        const detectedAttemptedOutOfRangeGeneration = !detectedGeneration
+          ? (typeof result.detectedGeneration === 'number' && (result.detectedGeneration < 1 || result.detectedGeneration > 12)
+              ? result.detectedGeneration
+              : extractAttemptedOutOfRangeGeneration(messageContent))
+          : undefined;
+
         let detectedMinistries: MinistryAction[] | undefined = (Array.isArray(result.detectedMinistries) && result.detectedMinistries.length > 0)
           ? result.detectedMinistries
           : extractMinistryActionsFromText(messageContent);
@@ -436,6 +445,7 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
           detectedEmail: result.detectedEmail || undefined,
           detectedAddress,
           detectedGeneration,
+          detectedAttemptedOutOfRangeGeneration,
           detectedMinistries,
           detectedOptIn: optIn,
           isDifferentPerson: Boolean(result.isDifferentPerson),
@@ -463,7 +473,11 @@ function extractNameFromSingleLine(line: string, options?: { allowBareName?: boo
 
   // Ignora linhas que são declarações de geração ou ministérios sem prefixo de nome
   if (
-    (extractGenerationFromText(line) !== undefined || extractMinistryActionsFromText(line).length > 0)
+    (
+      extractGenerationFromText(line) !== undefined
+      || extractAttemptedOutOfRangeGeneration(line) !== undefined
+      || extractMinistryActionsFromText(line).length > 0
+    )
     && !line.match(/(?:^|\b)(?:nome|chamo)\b/iu)
   ) {
     return undefined;
@@ -558,6 +572,7 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
       lines.some(l => l.includes('@'))
       || lines.some(l => Boolean(extractAddressFromText(l)))
       || lines.some(l => extractGenerationFromText(l) !== undefined)
+      || lines.some(l => extractAttemptedOutOfRangeGeneration(l) !== undefined)
       || lines.some(l => extractMinistryActionsFromText(l).length > 0)
     );
 
@@ -567,6 +582,7 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
           line.includes('@')
           || extractAddressFromText(line)
           || extractGenerationFromText(line) !== undefined
+          || extractAttemptedOutOfRangeGeneration(line) !== undefined
           || extractMinistryActionsFromText(line).length > 0
         ) {
           continue;
@@ -616,17 +632,43 @@ export function extractAddressFromText(text: string): string | undefined {
 
 /**
  * Extracts G12 generation slot (1 to 12) from text.
+ * Supports "Geração 3", "G12", "F3", "Frente 4", "Geração F3", "F12".
  * @param text - Message text.
  * @returns Generation slot integer between 1 and 12, or undefined.
  */
 export function extractGenerationFromText(text: string): number | undefined {
   const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
 
-  // Match "geração 3", "geracao 12", "g3", "g12", "geração: 4", "sou da g5"
-  const match = clean.match(/\b(?:geração|geracao|g)(?:\s*:\s*|\s+)?([1-9]|1[0-2])\b/iu);
-  if (match?.[1]) {
-    const slot = Number.parseInt(match[1], 10);
+  // Match "geração 3", "geracao f12", "frente 4", "geração: f5", "g12", "f3", "f 12"
+  const match = clean.match(
+    /\b(?:geração|geracao|frente)(?:\s*:\s*|\s+)?(?:[gf]\s*)?([1-9]|1[0-2])\b|\b[gf]\s*([1-9]|1[0-2])\b/iu,
+  );
+  const matchedSlot = match?.[1] ?? match?.[2];
+  if (matchedSlot) {
+    const slot = Number.parseInt(matchedSlot, 10);
     if (slot >= 1 && slot <= 12) {
+      return slot;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Detects attempted generation/frente numbers outside the 1 to 12 range (e.g. F13, Geração 15).
+ * @param text - Message text.
+ * @returns The out-of-range number if detected, otherwise undefined.
+ */
+export function extractAttemptedOutOfRangeGeneration(text: string): number | undefined {
+  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+
+  const match = clean.match(
+    /\b(?:geração|geracao|frente)(?:\s*:\s*|\s+)?(?:[gf]\s*)?(\d+)\b|\b[gf]\s*(\d+)\b/iu,
+  );
+  const matchedSlot = match?.[1] ?? match?.[2];
+  if (matchedSlot) {
+    const slot = Number.parseInt(matchedSlot, 10);
+    if (slot < 1 || slot > 12) {
       return slot;
     }
   }
@@ -663,11 +705,17 @@ export function extractMinistryActionsFromText(text: string): MinistryAction[] {
   // Common church ministries
   const ministryKeywords = [
     { key: 'louvor', name: 'Louvor & Adoração' },
+    { key: 'música', name: 'Louvor & Adoração' },
+    { key: 'musica', name: 'Louvor & Adoração' },
     { key: 'mídia', name: 'Mídia & Produção' },
     { key: 'midia', name: 'Mídia & Produção' },
+    { key: 'som', name: 'Mídia & Produção' },
     { key: 'kids', name: 'TelePaz Filadélfia Kids' },
     { key: 'filadélfia kids', name: 'TelePaz Filadélfia Kids' },
     { key: 'filadelfia kids', name: 'TelePaz Filadélfia Kids' },
+    { key: 'infantil', name: 'TelePaz Filadélfia Kids' },
+    { key: 'crianças', name: 'TelePaz Filadélfia Kids' },
+    { key: 'criancas', name: 'TelePaz Filadélfia Kids' },
     { key: 'consolidação', name: 'Consolidação' },
     { key: 'consolidacao', name: 'Consolidação' },
     { key: 'intercessão', name: 'Intercessão' },
@@ -708,6 +756,9 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
   const extractedEmail = emailMatch ? emailMatch[0] : undefined;
   const extractedAddress = extractAddressFromText(cleanCurrent);
   const extractedGeneration = extractGenerationFromText(cleanCurrent);
+  const extractedOutOfRangeGen = !extractedGeneration
+    ? extractAttemptedOutOfRangeGeneration(cleanCurrent)
+    : undefined;
   const extractedMinistries = extractMinistryActionsFromText(cleanCurrent);
 
   // 1. Confirmação explícita de opt-in na mensagem atual ("sim, gostaria de receber", "pode mandar", "sim", "aceito")
@@ -908,12 +959,19 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
   }
 
   // 6. Se enviou e-mail, endereço, geração ou ministério
-  if (extractedEmail || extractedAddress || extractedGeneration || extractedMinistries.length > 0) {
+  if (
+    extractedEmail
+    || extractedAddress
+    || extractedGeneration !== undefined
+    || extractedOutOfRangeGen !== undefined
+    || extractedMinistries.length > 0
+  ) {
     return {
       intent: 'OUTDATED_DATA',
       detectedEmail: extractedEmail,
       detectedAddress: extractedAddress,
       detectedGeneration: extractedGeneration,
+      detectedAttemptedOutOfRangeGeneration: extractedOutOfRangeGen,
       detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
       detectedName: extractedName,
       detectedOptIn: null,
@@ -927,6 +985,11 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     return {
       intent: 'OUTDATED_DATA',
       detectedName: extractedName,
+      detectedEmail: extractedEmail,
+      detectedAddress: extractedAddress,
+      detectedGeneration: extractedGeneration,
+      detectedAttemptedOutOfRangeGeneration: extractedOutOfRangeGen,
+      detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
       detectedOptIn: null,
       isDifferentPerson: false,
       rawDetails: 'Extracted name via rule-based analysis',
@@ -968,6 +1031,11 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
       return {
         intent: 'OUTDATED_DATA',
         detectedName: extractedName,
+        detectedEmail: extractedEmail,
+        detectedAddress: extractedAddress,
+        detectedGeneration: extractedGeneration,
+        detectedAttemptedOutOfRangeGeneration: extractedOutOfRangeGen,
+        detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
         detectedOptIn: null,
         isDifferentPerson: false,
         rawDetails: 'Detected via rule-based update keywords',
@@ -978,6 +1046,11 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
   return {
     intent: 'OTHER',
     detectedName: extractedName,
+    detectedEmail: extractedEmail,
+    detectedAddress: extractedAddress,
+    detectedGeneration: extractedGeneration,
+    detectedAttemptedOutOfRangeGeneration: extractedOutOfRangeGen,
+    detectedMinistries: extractedMinistries.length > 0 ? extractedMinistries : undefined,
     detectedOptIn: null,
     isDifferentPerson: false,
     rawDetails: 'Fallback default classification',

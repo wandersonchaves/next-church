@@ -150,7 +150,7 @@ describe('AIOrchestratorEngine', () => {
       expect(result.detectedAddress).toBe('Rua Ferroviaria, 8400');
     });
 
-    it('extracts generation slot for "Geração 3" and "G12", ignores out of bounds', async () => {
+    it('extracts generation slot for "Geração 3", "G12", "F3", "Geração F12", and "Frente 4"', async () => {
       const res1 = await analyzeMessageWithAI('Sou da Geração 3', 'Wanderson');
 
       expect(res1.detectedGeneration).toBe(3);
@@ -159,9 +159,29 @@ describe('AIOrchestratorEngine', () => {
 
       expect(res2.detectedGeneration).toBe(12);
 
-      const res3 = await analyzeMessageWithAI('Geração 15', 'Wanderson');
+      const res3 = await analyzeMessageWithAI('Geração F3', 'Wanderson');
 
-      expect(res3.detectedGeneration).toBeUndefined();
+      expect(res3.detectedGeneration).toBe(3);
+
+      const res4 = await analyzeMessageWithAI('Frente 4', 'Wanderson');
+
+      expect(res4.detectedGeneration).toBe(4);
+
+      const res5 = await analyzeMessageWithAI('F12', 'Wanderson');
+
+      expect(res5.detectedGeneration).toBe(12);
+    });
+
+    it('detects attempted out-of-range generations (e.g. F13, Geração 15)', async () => {
+      const res1 = await analyzeMessageWithAI('Geração F13', 'Wanderson');
+
+      expect(res1.detectedGeneration).toBeUndefined();
+      expect(res1.detectedAttemptedOutOfRangeGeneration).toBe(13);
+
+      const res2 = await analyzeMessageWithAI('Geração 15', 'Wanderson');
+
+      expect(res2.detectedGeneration).toBeUndefined();
+      expect(res2.detectedAttemptedOutOfRangeGeneration).toBe(15);
     });
 
     it('extracts ministry actions for adding and removing ministries', async () => {

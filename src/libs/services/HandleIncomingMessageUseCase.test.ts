@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { memberMinistries, members, ministries, notificationLogs } from '../../models/Schema';
 import { analyzeMessageWithAI } from '../AIOrchestratorEngine';
@@ -26,10 +26,11 @@ describe('handleIncomingMessageUseCase', () => {
   let testPhone = '';
   let testJid = '';
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     testPhone = `5586${Math.floor(90000000 + Math.random() * 9999999)}`;
     testJid = `${testPhone}@s.whatsapp.net`;
+    await db.delete(ministries).where(eq(ministries.organizationId, testOrgId));
   });
 
   describe('when member exists', () => {
@@ -1255,6 +1256,195 @@ describe('handleIncomingMessageUseCase', () => {
       expect(memberMin).toBeDefined();
       expect(memberMin?.ministryId).toBe(testMinistry.id);
       expect(memberMin?.role).toBe('VOLUNTÁRIO');
+
+      await db.delete(memberMinistries).where(eq(memberMinistries.memberId, testMember.id));
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+      await db.delete(ministries).where(eq(ministries.id, testMinistry.id));
+    });
+
+    it('handles real user case "Geração F13 e Ministério de Louvor": matches Louvor & Adoração, updates ministry, and adds out-of-range guidance note for Geração 13', async () => {
+      const [testMinistry] = await db
+        .insert(ministries)
+        .values({
+          organizationId: testOrgId,
+          name: 'Louvor & Adoração',
+        })
+        .returning();
+
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedGeneration: undefined,
+        detectedAttemptedOutOfRangeGeneration: 13,
+        detectedMinistries: [{ name: 'Ministério de Louvor', action: 'ADD' }],
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Geração F13 e Ministério de Louvor',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_updated_direct');
+
+      // Member ministry should be linked
+      const memberMin = await db.query.memberMinistries.findFirst({
+        where: eq(memberMinistries.memberId, testMember.id),
+      });
+
+      expect(memberMin?.ministryId).toBe(testMinistry.id);
+
+      // Member generation should NOT be set to 13
+      const updatedMember = await db.query.members.findFirst({
+        where: eq(members.id, testMember.id),
+      });
+
+      expect(updatedMember?.generationSlot).toBeNull();
+
+      // Check outgoing message contains ministry AND guidance note
+      const outgoingLog = await db.query.notificationLogs.findFirst({
+        where: and(
+          eq(notificationLogs.memberId, testMember.id),
+          eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+        ),
+        orderBy: (log, { desc }) => [desc(log.sentAt)],
+      });
+
+      expect(outgoingLog?.content).toContain('Dados atualizados com sucesso no seu cadastro! ✅');
+      expect(outgoingLog?.content).toContain('🏛️ *Ministério:* Louvor & Adoração');
+      expect(outgoingLog?.content).toContain('No modelo G12, as gerações vão de *1 a 12*. Como identificamos *Geração 13*');
+
+      await db.delete(memberMinistries).where(eq(memberMinistries.memberId, testMember.id));
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+      await db.delete(ministries).where(eq(ministries.id, testMinistry.id));
+    });
+
+    it('prompts for clarification when active member provides only out-of-range generation like F13 without fake success message', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedGeneration: undefined,
+        detectedAttemptedOutOfRangeGeneration: 13,
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'F13',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('out_of_range_generation_prompt_sent');
+
+      const outgoingLog = await db.query.notificationLogs.findFirst({
+        where: and(
+          eq(notificationLogs.memberId, testMember.id),
+          eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+        ),
+        orderBy: (log, { desc }) => [desc(log.sentAt)],
+      });
+
+      expect(outgoingLog?.content).toContain('No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração 13*)');
+      expect(outgoingLog?.content).not.toContain('Dados atualizados com sucesso');
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('directly updates both Frente F12 and Ministério de Louvor when active member provides Geração F12 e Ministério de Louvor', async () => {
+      const [testMinistry] = await db
+        .insert(ministries)
+        .values({
+          organizationId: testOrgId,
+          name: 'Louvor & Adoração',
+        })
+        .returning();
+
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wanderson',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedGeneration: 12,
+        detectedMinistries: [{ name: 'Ministério de Louvor', action: 'ADD' }],
+        isDifferentPerson: false,
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Geração F12 e Ministério de Louvor',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_updated_direct');
+
+      const updatedMember = await db.query.members.findFirst({
+        where: eq(members.id, testMember.id),
+      });
+
+      expect(updatedMember?.generationSlot).toBe(12);
+
+      const memberMin = await db.query.memberMinistries.findFirst({
+        where: eq(memberMinistries.memberId, testMember.id),
+      });
+
+      expect(memberMin?.ministryId).toBe(testMinistry.id);
+
+      const outgoingLog = await db.query.notificationLogs.findFirst({
+        where: and(
+          eq(notificationLogs.memberId, testMember.id),
+          eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+        ),
+        orderBy: (log, { desc }) => [desc(log.sentAt)],
+      });
+
+      expect(outgoingLog?.content).toContain('Dados atualizados com sucesso no seu cadastro! ✅');
+      expect(outgoingLog?.content).toContain('👥 *Geração:* Geração 12');
+      expect(outgoingLog?.content).toContain('🏛️ *Ministério:* Louvor & Adoração');
+      expect(outgoingLog?.content).not.toContain('Nota sobre a geração');
 
       await db.delete(memberMinistries).where(eq(memberMinistries.memberId, testMember.id));
       await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));

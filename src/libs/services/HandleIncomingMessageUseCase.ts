@@ -1,6 +1,13 @@
 import { and, eq, gte, ilike, isNull, or } from 'drizzle-orm';
-import { analyzeMessageWithAI, extractNameFromText, isInvalidName, removeDiacritics } from '@/libs/AIOrchestratorEngine';
+import {
+  analyzeMessageWithAI,
+  extractAttemptedOutOfRangeGeneration,
+  extractNameFromText,
+  isInvalidName,
+  removeDiacritics,
+} from '@/libs/AIOrchestratorEngine';
 import { db } from '@/libs/DB';
+import { SeedService } from '@/libs/Seed';
 import { NotificationService } from '@/libs/services/NotificationService';
 import { WhatsAppService } from '@/libs/services/WhatsAppService';
 import { auditLogs, memberMinistries, members, ministries, notificationLogs } from '@/models/Schema';
@@ -288,7 +295,57 @@ function extractPendingDataFromLogs(logs: Array<{ content: string; type: string 
 }
 
 /**
+ * Normalizes ministry names into significant token keywords for fuzzy matching.
+ * @param name - Ministry name string.
+ * @returns Array of lowercase normalized tokens (>= 3 chars).
+ */
+function normalizeMinistryTokens(name: string): string[] {
+  const clean = removeDiacritics(name.toLowerCase())
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(?:ministerio|departamento|equipe|grupo|rede|de|da|do|dos|das|e)\b/g, ' ')
+    .trim();
+  return clean.split(/\s+/).filter(token => token.length >= 3);
+}
+
+/**
+ * Matches an extracted ministry target to an existing tenant ministry.
+ * @param targetName - Target ministry name from message.
+ * @param orgMinistries - Existing tenant ministries.
+ * @returns Matched ministry or undefined.
+ */
+function matchMinistry(
+  targetName: string,
+  orgMinistries: Array<{ id: string; name: string }>,
+): { id: string; name: string } | undefined {
+  const normTarget = removeDiacritics(targetName.toLowerCase()).trim();
+  if (!normTarget) {
+    return undefined;
+  }
+
+  // 1. Direct or substring match
+  const direct = orgMinistries.find((m) => {
+    const dbNorm = removeDiacritics(m.name.toLowerCase()).trim();
+    return dbNorm.includes(normTarget) || normTarget.includes(dbNorm);
+  });
+  if (direct) {
+    return direct;
+  }
+
+  // 2. Token overlap match (e.g. "louvor" in "Louvor & Adoração" and "Ministério de Louvor")
+  const targetTokens = normalizeMinistryTokens(targetName);
+  if (targetTokens.length === 0) {
+    return undefined;
+  }
+
+  return orgMinistries.find((m) => {
+    const dbTokens = normalizeMinistryTokens(m.name);
+    return targetTokens.some(t => dbTokens.includes(t)) || dbTokens.some(d => targetTokens.includes(d));
+  });
+}
+
+/**
  * Safely associates or disassociates a member with ministries belonging to their organization.
+ * Automatically seeds default ministries if empty, matches via fuzzy tokens, and creates if not found.
  * Strictly scoped to the organization and defaults role to 'VOLUNTÁRIO'.
  * @param params - Configuration object.
  * @param params.memberId - Unique member identifier.
@@ -303,21 +360,50 @@ async function syncMemberMinistries(params: {
 }): Promise<string[]> {
   const updatedMinistries: string[] = [];
 
-  const orgMinistries = await db
+  let orgMinistries = await db
     .select({ id: ministries.id, name: ministries.name })
     .from(ministries)
     .where(eq(ministries.organizationId, params.organizationId));
 
+  if (orgMinistries.length === 0) {
+    try {
+      await SeedService.initializeOrganization(params.organizationId);
+      orgMinistries = await db
+        .select({ id: ministries.id, name: ministries.name })
+        .from(ministries)
+        .where(eq(ministries.organizationId, params.organizationId));
+    } catch (error) {
+      console.error('[SYNC_MINISTRIES_SEED_ERROR]', error);
+    }
+  }
+
   for (const actionItem of params.ministryActions) {
-    const normalizedTarget = actionItem.name.trim().toLowerCase();
-    if (!normalizedTarget) {
+    const cleanName = actionItem.name.trim();
+    if (!cleanName) {
       continue;
     }
 
-    const matched = orgMinistries.find((m) => {
-      const dbName = m.name.toLowerCase();
-      return dbName.includes(normalizedTarget) || normalizedTarget.includes(dbName);
-    });
+    let matched = matchMinistry(cleanName, orgMinistries);
+
+    if (!matched && actionItem.action === 'ADD') {
+      try {
+        const [newMin] = await db
+          .insert(ministries)
+          .values({
+            organizationId: params.organizationId,
+            name: cleanName,
+            description: `Ministério de ${cleanName}`,
+          })
+          .returning({ id: ministries.id, name: ministries.name });
+
+        if (newMin) {
+          matched = newMin;
+          orgMinistries.push(newMin);
+        }
+      } catch (error) {
+        console.error(`[SYNC_MINISTRY_INSERT_ERROR] Failed to auto-create ministry "${cleanName}":`, error);
+      }
+    }
 
     if (!matched) {
       continue;
@@ -613,18 +699,23 @@ export async function handleIncomingMessageUseCase(params: {
 
         welcomeLines.push(``);
 
-        const missingFields: string[] = [];
+        const missingLabels: string[] = [];
         if (!finalEmail) {
-          missingFields.push('e-mail');
+          missingLabels.push('e-mail');
         }
         if (!finalAddress) {
-          missingFields.push('endereço');
+          missingLabels.push('endereço');
         }
         if (!finalGeneration) {
-          missingFields.push('geração');
+          missingLabels.push('geração');
         }
-        if (missingFields.length > 0) {
-          welcomeLines.push(`💡 *Dica:* Quando quiser, você pode nos enviar seu ${missingFields.join(', ')} ou ministérios que participa para completar seu cadastro!`);
+        if (missingLabels.length > 0) {
+          const phrase = missingLabels.length === 1 && !finalGeneration
+            ? 'sua geração'
+            : missingLabels.length === 1
+              ? `seu ${missingLabels[0]}`
+              : `seus dados (${missingLabels.join(', ')})`;
+          welcomeLines.push(`💡 *Dica:* Quando quiser, você pode nos enviar ${phrase} ou ministérios que participa para completar seu cadastro!`);
           welcomeLines.push(``);
         }
 
@@ -685,6 +776,32 @@ export async function handleIncomingMessageUseCase(params: {
         });
 
         return { status: 'name_updated_awaiting_opt_in' };
+      }
+
+      const awaitingOutOfRangeGen = result.detectedAttemptedOutOfRangeGeneration
+        ?? extractAttemptedOutOfRangeGeneration(content);
+
+      if (
+        !candidateName
+        && !result.detectedEmail
+        && !result.detectedAddress
+        && !result.detectedGeneration
+        && (!candidateMinistries || candidateMinistries.length === 0)
+        && awaitingOutOfRangeGen !== undefined
+      ) {
+        const outOfRangeMsg = [
+          `No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração ${awaitingOutOfRangeGen}*).`,
+          ``,
+          `Poderia nos confirmar qual é a sua geração entre 1 e 12? (Ex: "Geração 12" ou "F3") 🙏`,
+        ].join('\n');
+
+        await sendAndLogWhatsAppMessage({
+          phone: sender,
+          message: outOfRangeMsg,
+          organizationId,
+        });
+
+        return { status: 'out_of_range_generation_prompt_sent' };
       }
 
       // 2.3 Se contestou os dados ou disse "Não" sem enviar a informação correta ainda
@@ -836,13 +953,17 @@ export async function handleIncomingMessageUseCase(params: {
       return { status: 'member_data_corrected' };
     }
 
+    const attemptedOutOfRangeGen = result.detectedAttemptedOutOfRangeGeneration
+      ?? extractAttemptedOutOfRangeGeneration(content);
+
     // 4.2: Atualização Direta de Dados Complementares para Membro Ativo (E-mail, Endereço, Geração 1-12, Ministérios)
     // Sem passar pelo ritual de AWAITING_UPDATE ou exigir "Sim/Não/Parar" se o membro já é ativo e seu nome não mudou!
     const hasComplementaryData = Boolean(
       result.detectedEmail
       || result.detectedAddress
       || (result.detectedGeneration && result.detectedGeneration >= 1 && result.detectedGeneration <= 12)
-      || (result.detectedMinistries && result.detectedMinistries.length > 0),
+      || (result.detectedMinistries && result.detectedMinistries.length > 0)
+      || attemptedOutOfRangeGen !== undefined,
     );
 
     if (hasComplementaryData) {
@@ -856,15 +977,18 @@ export async function handleIncomingMessageUseCase(params: {
       };
 
       const updatedFieldsList: string[] = [];
+      let hasMemberFieldUpdated = false;
 
       if (result.detectedEmail) {
         updatePayload.email = result.detectedEmail;
         updatedFieldsList.push(`📧 *E-mail:* ${result.detectedEmail}`);
+        hasMemberFieldUpdated = true;
       }
 
       if (result.detectedAddress) {
         updatePayload.address = result.detectedAddress;
         updatedFieldsList.push(`📍 *Endereço:* ${result.detectedAddress}`);
+        hasMemberFieldUpdated = true;
       }
 
       // Validação estrita de Geração (apenas slots inteiros de 1 a 12)
@@ -876,13 +1000,16 @@ export async function handleIncomingMessageUseCase(params: {
       ) {
         updatePayload.generationSlot = result.detectedGeneration;
         updatedFieldsList.push(`👥 *Geração:* Geração ${result.detectedGeneration}`);
+        hasMemberFieldUpdated = true;
       }
 
-      // Executa mutação no membro (apenas no próprio registro e tenant)
-      await db
-        .update(members)
-        .set(updatePayload)
-        .where(and(eq(members.id, member.id), eq(members.organizationId, organizationId)));
+      // Executa mutação no membro (apenas no próprio registro e tenant) somente se houve alteração em membro
+      if (hasMemberFieldUpdated) {
+        await db
+          .update(members)
+          .set(updatePayload)
+          .where(and(eq(members.id, member.id), eq(members.organizationId, organizationId)));
+      }
 
       // Sincroniza ministérios se informados (apenas ministérios existentes do tenant, como VOLUNTÁRIO)
       if (result.detectedMinistries && result.detectedMinistries.length > 0) {
@@ -896,6 +1023,41 @@ export async function handleIncomingMessageUseCase(params: {
         }
       }
 
+      if (updatedFieldsList.length === 0) {
+        if (attemptedOutOfRangeGen !== undefined) {
+          const outOfRangeMsg = [
+            `No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração ${attemptedOutOfRangeGen}*).`,
+            ``,
+            `Poderia nos confirmar qual é a sua geração entre 1 e 12? (Ex: "Geração 12" ou "F3") 🙏`,
+          ].join('\n');
+
+          await sendAndLogWhatsAppMessage({
+            phone: sender,
+            message: outOfRangeMsg,
+            organizationId,
+          });
+
+          return { status: 'out_of_range_generation_prompt_sent' };
+        }
+
+        const fallbackClarificationMsg = [
+          `Não conseguimos identificar com clareza as informações para atualização.`,
+          ``,
+          `Você pode nos enviar informando, por exemplo:`,
+          `• *Geração:* "Geração 3" ou "F3" (de 1 a 12)`,
+          `• *Ministério:* "Ministério de Louvor", "Mídia", "Kids", etc.`,
+          `• *E-mail ou Endereço:* seu e-mail ou endereço atualizado.`,
+        ].join('\n');
+
+        await sendAndLogWhatsAppMessage({
+          phone: sender,
+          message: fallbackClarificationMsg,
+          organizationId,
+        });
+
+        return { status: 'complementary_data_clarification_sent' };
+      }
+
       await logSystemActivity({
         organizationId,
         action: 'UPDATE',
@@ -903,17 +1065,27 @@ export async function handleIncomingMessageUseCase(params: {
         entityName: `Dados complementares atualizados diretamente para ${memberFullName}`,
       });
 
-      const confirmationReply = [
+      const confirmationReplyLines = [
         `Dados atualizados com sucesso no seu cadastro! ✅`,
         ``,
         ...updatedFieldsList,
+      ];
+
+      if (attemptedOutOfRangeGen !== undefined) {
+        confirmationReplyLines.push(
+          ``,
+          `ℹ️ *Nota sobre a geração:* No modelo G12, as gerações vão de *1 a 12*. Como identificamos *Geração ${attemptedOutOfRangeGen}*, ela não pôde ser salva. Se desejar cadastrar sua geração, envie um número entre 1 e 12 (ex: "Geração 12" ou "F3").`,
+        );
+      }
+
+      confirmationReplyLines.push(
         ``,
         `Se precisar atualizar mais alguma informação, é só nos mandar por aqui! 🙏`,
-      ].join('\n');
+      );
 
       await sendAndLogWhatsAppMessage({
         phone: sender,
-        message: confirmationReply,
+        message: confirmationReplyLines.join('\n'),
         organizationId,
       });
 
