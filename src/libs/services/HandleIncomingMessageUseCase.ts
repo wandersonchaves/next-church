@@ -1,5 +1,5 @@
 import { and, eq, gte, ilike, isNull, or } from 'drizzle-orm';
-import { analyzeMessageWithAI, extractNameFromText, isInvalidName } from '@/libs/AIOrchestratorEngine';
+import { analyzeMessageWithAI, extractNameFromText, isInvalidName, removeDiacritics } from '@/libs/AIOrchestratorEngine';
 import { db } from '@/libs/DB';
 import { NotificationService } from '@/libs/services/NotificationService';
 import { WhatsAppService } from '@/libs/services/WhatsAppService';
@@ -47,46 +47,35 @@ function cleanPhoneDigits(phone: string): string {
  * @returns True if text explicitly requests to stop receiving messages.
  */
 export function isExplicitOptOutMessage(text: string): boolean {
-  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+  const clean = text.replace(/\[.*?\]/g, '').trim();
+  const normalized = removeDiacritics(clean);
   const optOutPhrases = [
     'parar',
     'stop',
     'sair',
-    'não quero receber',
     'nao quero receber',
-    'não quero mais receber',
     'nao quero mais receber',
-    'não envie mais',
     'nao envie mais',
-    'não mande mais',
     'nao mande mais',
-    'não mande mensagem',
     'nao mande mensagem',
-    'não envie mensagem',
     'nao envie mensagem',
-    'não quero mensagens',
     'nao quero mensagens',
-    'não quero mais mensagens',
     'nao quero mais mensagens',
-    'remova meu número',
     'remova meu numero',
-    'remover meu número',
     'remover meu numero',
     'remova meu contato',
     'remover meu contato',
-    'tire meu número',
     'tire meu numero',
     'cancele mensagens',
     'cancelar mensagens',
     'cancelar comunicacao',
-    'cancelar comunicação',
   ];
 
   return optOutPhrases.some(phrase =>
-    clean === phrase
-    || clean.startsWith(`${phrase} `)
-    || clean.endsWith(` ${phrase}`)
-    || clean.includes(phrase),
+    normalized === phrase
+    || normalized.startsWith(`${phrase} `)
+    || normalized.endsWith(` ${phrase}`)
+    || normalized.includes(phrase),
   );
 }
 
@@ -96,40 +85,49 @@ export function isExplicitOptOutMessage(text: string): boolean {
  * @returns True if the message contests data without being an opt-out.
  */
 export function isDataContestation(text: string): boolean {
-  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+  const clean = text.replace(/\[.*?\]/g, '').trim();
+  const normalized = removeDiacritics(clean);
+
   if (
-    clean === 'não'
-    || clean === 'nao'
-    || clean === 'não não'
-    || clean === 'nao nao'
+    normalized === 'nao'
+    || normalized === 'nao nao'
   ) {
     return true;
   }
 
   const contestationPhrases = [
-    'está errado',
     'esta errado',
-    'tá errado',
     'ta errado',
-    'não está certo',
     'nao esta certo',
-    'não tá certo',
     'nao ta certo',
-    'não confirmo',
     'nao confirmo',
     'dados errados',
     'dados incorretos',
     'nome errado',
-    'não é esse',
     'nao e esse',
-    'não é esse nome',
     'nao e esse nome',
-    'informação errada',
+    'nao e esse o meu nome',
+    'esse nao e meu nome',
+    'nao e meu nome',
+    'meu nome nao e esse',
+    'meu nome ta errado',
+    'meu nome esta errado',
+    'cadastro errado',
     'informacao errada',
+    'informacao incorreta',
     'incorreto',
+    'esta tudo errado',
+    'ta tudo errado',
+    'tudo errado',
+    'nao sou esse',
+    'nao sou essa pessoa',
+    'nao e essa pessoa',
+    'nao me chamo assim',
+    'errado',
+    'errada',
   ];
 
-  return contestationPhrases.some(phrase => clean.includes(phrase));
+  return contestationPhrases.some(phrase => normalized.includes(phrase));
 }
 
 /**
@@ -761,7 +759,7 @@ export async function handleIncomingMessageUseCase(params: {
     const isNameDifferent = Boolean(
       result.detectedName
       && !isInvalidName(result.detectedName)
-      && result.detectedName.trim().toLowerCase() !== member.firstName.trim().toLowerCase(),
+      && removeDiacritics(result.detectedName) !== removeDiacritics(member.firstName),
     );
 
     if (isNameDifferent) {

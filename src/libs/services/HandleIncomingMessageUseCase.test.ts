@@ -1261,5 +1261,112 @@ describe('handleIncomingMessageUseCase', () => {
       await db.delete(members).where(eq(members.id, testMember.id));
       await db.delete(ministries).where(eq(ministries.id, testMinistry.id));
     });
+
+    it('handles real user case "mas meu nome não e esse", prompts for data, and updates upon subsequent name provision', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wendersonnn',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedName: undefined,
+        detectedOptIn: null,
+        isDifferentPerson: false,
+      });
+
+      // Step 1: Member says "mas meu nome não e esse"
+      const res1 = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'mas meu nome não e esse',
+        organizationId: testOrgId,
+      });
+
+      expect(res1.status).toBe('awaiting_update_prompt_sent');
+
+      const [pendingMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(pendingMember?.status).toBe('AWAITING_UPDATE');
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('Qual seria o seu nome completo, e-mail ou endereço'),
+        }),
+      );
+
+      // Step 2: Member provides the correct name "Wanderson Chaves"
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedName: 'Wanderson Chaves',
+        detectedOptIn: null,
+        isDifferentPerson: false,
+      });
+
+      await db.insert(notificationLogs).values({
+        organizationId: testOrgId,
+        memberId: testMember.id,
+        type: 'WHATSAPP_INCOMING',
+        status: 'RECEIVED',
+        content: 'Me chamo Wanderson Chaves',
+        sentAt: new Date(Date.now() + 1000),
+      });
+
+      const res2 = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Me chamo Wanderson Chaves',
+        organizationId: testOrgId,
+      });
+
+      expect(res2.status).toBe('name_updated_awaiting_opt_in');
+
+      // Step 3: Member confirms with "Sim"
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'CONFIRMED',
+        detectedOptIn: true,
+        isDifferentPerson: false,
+      });
+
+      await db.insert(notificationLogs).values({
+        organizationId: testOrgId,
+        memberId: testMember.id,
+        type: 'WHATSAPP_INCOMING',
+        status: 'RECEIVED',
+        content: 'Sim',
+        sentAt: new Date(Date.now() + 2000),
+      });
+
+      const res3 = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'Sim',
+        organizationId: testOrgId,
+      });
+
+      expect(res3.status).toBe('awaiting_update_confirmed_opt_in');
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.firstName).toBe('Wanderson');
+      expect(updatedMember?.lastName).toBe('Chaves');
+      expect(updatedMember?.status).toBe('ACTIVE');
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
   });
 });

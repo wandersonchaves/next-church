@@ -124,6 +124,26 @@ describe('AIOrchestratorEngine', () => {
       expect(result.isDifferentPerson).toBe(true);
     });
 
+    it('classifies "mas meu nome não e esse" (mixed diacritics) as OUTDATED_DATA without hallucinating name', async () => {
+      const result = await analyzeMessageWithAI('mas meu nome não e esse', 'Wendersonnn');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedName).toBeUndefined();
+      expect(result.detectedOptIn).toBeNull();
+    });
+
+    it('classifies "meu nome não é esse" and "esse nao e meu nome" as OUTDATED_DATA', async () => {
+      const res1 = await analyzeMessageWithAI('meu nome não é esse', 'Wendersonnn');
+
+      expect(res1.intent).toBe('OUTDATED_DATA');
+      expect(res1.detectedName).toBeUndefined();
+
+      const res2 = await analyzeMessageWithAI('esse nao e meu nome', 'Wendersonnn');
+
+      expect(res2.intent).toBe('OUTDATED_DATA');
+      expect(res2.detectedName).toBeUndefined();
+    });
+
     it('extracts street address for "Rua Ferroviaria, 8400"', async () => {
       const result = await analyzeMessageWithAI('Rua Ferroviaria, 8400', 'Wanderson');
 

@@ -182,7 +182,33 @@ export const NON_NAME_WORDS = new Set([
   'novo',
   'midia',
   'mídia',
+  'esse',
+  'essa',
+  'este',
+  'esta',
+  'errado',
+  'errada',
+  'certo',
+  'certa',
+  'meu',
+  'nome',
+  'cadastro',
+  'pessoa',
 ]);
+
+/**
+ * Normalizes text by removing diacritical marks (accents and tildes) and lowercasing.
+ * Ensures consistent matching in Brazilian Portuguese regardless of accentuation.
+ * @param text - Input text to normalize.
+ * @returns Lowercase string stripped of diacritics.
+ */
+export function removeDiacritics(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036F]/g, '')
+    .toLowerCase()
+    .trim();
+}
 
 /**
  * Checks if a string is a non-name term (such as religious phrases, greetings, or acknowledgments).
@@ -588,7 +614,7 @@ export function extractMinistryActionsFromText(text: string): MinistryAction[] {
  */
 function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtractionResult {
   const cleanCurrent = currentText.replace(/\[.*?\]/g, '').trim();
-  const normalizedCurrent = cleanCurrent.toLowerCase();
+  const normalizedCurrent = removeDiacritics(cleanCurrent);
 
   const emailMatch = cleanCurrent.match(/[\w.%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
   const extractedEmail = emailMatch ? emailMatch[0] : undefined;
@@ -614,9 +640,13 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     'ok',
     'correto',
     'certo',
+    'esta correto',
+    'ta certo',
     'sou eu',
     'sou eu mesma',
     'sou eu mesmo',
+    'isso mesmo',
+    'isso',
   ];
 
   const isConfirmation = confirmPhrases.some(kw =>
@@ -644,34 +674,22 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
 
   // 3. Recusa explícita de mensagens ("não quero receber", "não envie mais", "parar", "stop", "sair")
   const explicitOptOutPhrases = [
-    'não quero receber',
     'nao quero receber',
-    'não quero mais receber',
     'nao quero mais receber',
-    'não envie mais',
     'nao envie mais',
-    'não mande mais',
     'nao mande mais',
-    'não mande mensagem',
     'nao mande mensagem',
-    'não envie mensagem',
     'nao envie mensagem',
-    'não quero mensagens',
     'nao quero mensagens',
-    'não quero mais mensagens',
     'nao quero mais mensagens',
-    'remova meu número',
     'remova meu numero',
-    'remover meu número',
     'remover meu numero',
     'remova meu contato',
     'remover meu contato',
-    'tire meu número',
     'tire meu numero',
     'cancele mensagens',
     'cancelar mensagens',
     'cancelar comunicacao',
-    'cancelar comunicação',
     'parar',
     'stop',
     'sair',
@@ -693,35 +711,42 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     };
   }
 
-  // 4. Contestação ou rejeição de dados ("está errado", "não está certo", "não confirmo", "não", etc.)
+  // 4. Contestação ou rejeição de dados ("está errado", "não está certo", "não confirmo", "não", "meu nome não é esse", etc.)
   // IMPORTANTE: Contestar dados ou responder "não" em relação ao cadastro NÃO é opt-out de mensagens!
   const dataContestationPhrases = [
-    'está errado',
     'esta errado',
-    'tá errado',
     'ta errado',
-    'não está certo',
     'nao esta certo',
-    'não tá certo',
     'nao ta certo',
-    'não confirmo',
     'nao confirmo',
     'dados errados',
     'dados incorretos',
     'nome errado',
-    'não é esse',
     'nao e esse',
-    'não é esse nome',
     'nao e esse nome',
-    'informação errada',
+    'nao e esse o meu nome',
+    'esse nao e meu nome',
+    'nao e meu nome',
+    'meu nome nao e esse',
+    'meu nome ta errado',
+    'meu nome esta errado',
+    'cadastro errado',
     'informacao errada',
+    'informacao incorreta',
     'incorreto',
+    'esta tudo errado',
+    'ta tudo errado',
+    'tudo errado',
+    'nao sou esse',
+    'nao sou essa pessoa',
+    'nao e essa pessoa',
+    'nao me chamo assim',
+    'errado',
+    'errada',
   ];
 
   const isDataContestation = (
-    normalizedCurrent === 'não'
-    || normalizedCurrent === 'nao'
-    || normalizedCurrent === 'não não'
+    normalizedCurrent === 'nao'
     || normalizedCurrent === 'nao nao'
     || dataContestationPhrases.some(kw => normalizedCurrent.includes(kw))
   );
@@ -742,34 +767,27 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
 
   // 5. Aviso de número errado ("não me chamo", "não sou", "número errado", "não tem...")
   const wrongKeywords = [
-    'não sou',
     'nao sou',
-    'não me chamo',
     'nao me chamo',
     'numero errado',
-    'número errado',
-    'não é ele',
     'nao e ele',
-    'não é ela',
     'nao e ela',
-    'não conhece',
     'nao conhece',
-    'não sei quem',
     'nao sei quem',
-    'desconheço',
     'desconheco',
     'outro dono',
     'engano',
     'nao tem',
-    'não tem',
-    'não moro',
     'nao moro',
+    'meu nome nao e esse',
+    'nao e meu nome',
+    'esse nao e meu nome',
   ];
 
   const hasWrongKeyword = wrongKeywords.some(kw => normalizedCurrent.includes(kw));
   if (hasWrongKeyword) {
     let detectedOptIn: boolean | null = null;
-    if (normalizedCurrent.includes('não quero') || normalizedCurrent.includes('nao quero') || normalizedCurrent.includes('não envie') || normalizedCurrent.includes('nao envie')) {
+    if (normalizedCurrent.includes('nao quero') || normalizedCurrent.includes('nao envie')) {
       detectedOptIn = false;
     } else {
       // Remove correções de nome do tipo "e sim [Nome]" / "mas sim [Nome]" para não confundir com consentimento
@@ -827,11 +845,17 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     'meu e-mail',
     'mudei de',
     'mudou',
-    'endereço novo',
     'endereco novo',
-    'atualizar',
-    'corrigir',
-    'meu nome é',
+    'novo endereco',
+    'atualizar cadastro',
+    'atualizar meus dados',
+    'atualizar dados',
+    'mudar dados',
+    'corrigir cadastro',
+    'corrigir dados',
+    'corrigir meu nome',
+    'trocar meu nome',
+    'alterar meu nome',
     'meu nome e',
     'me chamo',
     'chamo-me',
