@@ -473,10 +473,9 @@ export default function CommunicationPage() {
                       <label htmlFor="leaderGeneration" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Geração do Líder</label>
                       <select value={generation} onChange={e => setGeneration(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
                         <option value="">Todas as Linhagens</option>
-                        {Array.from({ length: 13 }, (_, i) => (
+                        {Array.from({ length: 12 }, (_, i) => (
                           <option key={i + 1} value={i + 1}>
-                            F
-                            {i + 1}
+                            {`Geração F${i + 1}`}
                           </option>
                         ))}
                       </select>

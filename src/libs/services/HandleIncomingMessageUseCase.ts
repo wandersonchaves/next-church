@@ -181,7 +181,7 @@ function buildConfirmationPrompt(params: {
     && params.generation >= 1
     && params.generation <= 12
   ) {
-    lines.push(`👥 *Geração:* Geração ${params.generation}`);
+    lines.push(`👥 *Geração:* Geração F${params.generation}`);
   }
   if (params.ministries && params.ministries.length > 0) {
     lines.push(`🏛️ *Ministérios:* ${params.ministries.join(', ')}`);
@@ -232,7 +232,7 @@ function extractPendingDataFromPrompt(content: string): {
     pendingAddress = addressMatch[1].trim();
   }
 
-  const genMatch = content.match(/👥\s*\*Geração:\*\s*Geração\s*(\d+)/iu);
+  const genMatch = content.match(/👥\s*\*Geração:\*\s*Geração\s*F?(\d+)/iu);
   if (genMatch?.[1]) {
     const slot = Number.parseInt(genMatch[1], 10);
     if (slot >= 1 && slot <= 12) {
@@ -691,7 +691,7 @@ export async function handleIncomingMessageUseCase(params: {
         ];
 
         if (finalGeneration && finalGeneration >= 1 && finalGeneration <= 12) {
-          welcomeLines.push(`👥 *Geração:* Geração ${finalGeneration}`);
+          welcomeLines.push(`👥 *Geração:* Geração F${finalGeneration}`);
         }
         if (confirmedMinistries.length > 0) {
           welcomeLines.push(`🏛️ *Ministérios:* ${confirmedMinistries.join(', ')}`);
@@ -707,11 +707,11 @@ export async function handleIncomingMessageUseCase(params: {
           missingLabels.push('endereço');
         }
         if (!finalGeneration) {
-          missingLabels.push('geração');
+          missingLabels.push('geração (F1 a F12)');
         }
         if (missingLabels.length > 0) {
           const phrase = missingLabels.length === 1 && !finalGeneration
-            ? 'sua geração'
+            ? 'sua geração (F1 a F12)'
             : missingLabels.length === 1
               ? `seu ${missingLabels[0]}`
               : `seus dados (${missingLabels.join(', ')})`;
@@ -790,9 +790,9 @@ export async function handleIncomingMessageUseCase(params: {
         && awaitingOutOfRangeGen !== undefined
       ) {
         const outOfRangeMsg = [
-          `No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração ${awaitingOutOfRangeGen}*).`,
+          `No modelo G12 da nossa igreja (Filadélfia), as gerações vão de *F1 a F12* (identificamos *Geração F${awaitingOutOfRangeGen}*).`,
           ``,
-          `Poderia nos confirmar qual é a sua geração entre 1 e 12? (Ex: "Geração 12" ou "F3") 🙏`,
+          `Poderia nos confirmar qual é a sua geração entre F1 e F12? (Ex: "Geração F12" ou "F3") 🙏`,
         ].join('\n');
 
         await sendAndLogWhatsAppMessage({
@@ -999,7 +999,7 @@ export async function handleIncomingMessageUseCase(params: {
         && result.detectedGeneration <= 12
       ) {
         updatePayload.generationSlot = result.detectedGeneration;
-        updatedFieldsList.push(`👥 *Geração:* Geração ${result.detectedGeneration}`);
+        updatedFieldsList.push(`👥 *Geração:* Geração F${result.detectedGeneration}`);
         hasMemberFieldUpdated = true;
       }
 
@@ -1026,9 +1026,9 @@ export async function handleIncomingMessageUseCase(params: {
       if (updatedFieldsList.length === 0) {
         if (attemptedOutOfRangeGen !== undefined) {
           const outOfRangeMsg = [
-            `No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração ${attemptedOutOfRangeGen}*).`,
+            `No modelo G12 da nossa igreja (Filadélfia), as gerações vão de *F1 a F12* (identificamos *Geração F${attemptedOutOfRangeGen}*).`,
             ``,
-            `Poderia nos confirmar qual é a sua geração entre 1 e 12? (Ex: "Geração 12" ou "F3") 🙏`,
+            `Poderia nos confirmar qual é a sua geração entre F1 e F12? (Ex: "Geração F12" ou "F3") 🙏`,
           ].join('\n');
 
           await sendAndLogWhatsAppMessage({
@@ -1044,7 +1044,7 @@ export async function handleIncomingMessageUseCase(params: {
           `Não conseguimos identificar com clareza as informações para atualização.`,
           ``,
           `Você pode nos enviar informando, por exemplo:`,
-          `• *Geração:* "Geração 3" ou "F3" (de 1 a 12)`,
+          `• *Geração:* "Geração F3" ou "F3" (de F1 a F12)`,
           `• *Ministério:* "Ministério de Louvor", "Mídia", "Kids", etc.`,
           `• *E-mail ou Endereço:* seu e-mail ou endereço atualizado.`,
         ].join('\n');
@@ -1074,7 +1074,7 @@ export async function handleIncomingMessageUseCase(params: {
       if (attemptedOutOfRangeGen !== undefined) {
         confirmationReplyLines.push(
           ``,
-          `ℹ️ *Nota sobre a geração:* No modelo G12, as gerações vão de *1 a 12*. Como identificamos *Geração ${attemptedOutOfRangeGen}*, ela não pôde ser salva. Se desejar cadastrar sua geração, envie um número entre 1 e 12 (ex: "Geração 12" ou "F3").`,
+          `ℹ️ *Nota sobre a geração:* No modelo G12 da nossa igreja (Filadélfia), as gerações vão de *F1 a F12*. Como identificamos *Geração F${attemptedOutOfRangeGen}*, ela não pôde ser salva. Se desejar cadastrar sua geração, envie um número entre F1 e F12 (ex: "Geração F12" ou "F3").`,
         );
       }
 

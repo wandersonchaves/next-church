@@ -33,8 +33,8 @@ export default async function GenerationPage(props: { params: Promise<{ slot: st
             F{slot}
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">Geração {slot}</h1>
-            <p className="text-sm text-slate-500 font-medium mt-2">Visualizando todos os integrantes posicionados na {slot}ª Geração da {churchName}.</p>
+            <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">Geração F{slot}</h1>
+            <p className="text-sm text-slate-500 font-medium mt-2">Visualizando todos os integrantes posicionados na Geração F{slot} da {churchName}.</p>
           </div>
         </div>
       </header>

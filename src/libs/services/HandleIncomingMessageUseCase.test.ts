@@ -1328,7 +1328,7 @@ describe('handleIncomingMessageUseCase', () => {
 
       expect(outgoingLog?.content).toContain('Dados atualizados com sucesso no seu cadastro! ✅');
       expect(outgoingLog?.content).toContain('🏛️ *Ministério:* Louvor & Adoração');
-      expect(outgoingLog?.content).toContain('No modelo G12, as gerações vão de *1 a 12*. Como identificamos *Geração 13*');
+      expect(outgoingLog?.content).toContain('No modelo G12 da nossa igreja (Filadélfia), as gerações vão de *F1 a F12*. Como identificamos *Geração F13*');
 
       await db.delete(memberMinistries).where(eq(memberMinistries.memberId, testMember.id));
       await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
@@ -1375,7 +1375,7 @@ describe('handleIncomingMessageUseCase', () => {
         orderBy: (log, { desc }) => [desc(log.sentAt)],
       });
 
-      expect(outgoingLog?.content).toContain('No modelo G12 da nossa igreja, as gerações vão de *1 a 12* (identificamos *Geração 13*)');
+      expect(outgoingLog?.content).toContain('No modelo G12 da nossa igreja (Filadélfia), as gerações vão de *F1 a F12* (identificamos *Geração F13*)');
       expect(outgoingLog?.content).not.toContain('Dados atualizados com sucesso');
 
       await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
@@ -1442,7 +1442,7 @@ describe('handleIncomingMessageUseCase', () => {
       });
 
       expect(outgoingLog?.content).toContain('Dados atualizados com sucesso no seu cadastro! ✅');
-      expect(outgoingLog?.content).toContain('👥 *Geração:* Geração 12');
+      expect(outgoingLog?.content).toContain('👥 *Geração:* Geração F12');
       expect(outgoingLog?.content).toContain('🏛️ *Ministério:* Louvor & Adoração');
       expect(outgoingLog?.content).not.toContain('Nota sobre a geração');
 

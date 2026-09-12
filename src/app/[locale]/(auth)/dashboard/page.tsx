@@ -102,7 +102,7 @@ export default async function DashboardPage(props: {
                         F{slot}
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-700">Geração {slot}</p>
+                        <p className="text-sm font-bold text-slate-700">Geração F{slot}</p>
                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">{count} integrantes vinculados</p>
                       </div>
                     </div>

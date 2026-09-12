@@ -213,7 +213,7 @@ export const MemberForm = ({ leaders = [], initialData, onSubmitCustom, isPublic
                   >
                     <div className="flex flex-col">
                       <span className="leading-none">{l.firstName} {l.lastName}</span>
-                      <span className="text-[9px] font-black text-slate-300 uppercase mt-1.5 tracking-widest">Geração {l.generationSlot || '?'}</span>
+                      <span className="text-[9px] font-black text-slate-300 uppercase mt-1.5 tracking-widest">{l.generationSlot ? `Geração F${l.generationSlot}` : 'Geração ?'}</span>
                     </div>
                     {leaderId === l.id && <Check size={16} />}
                   </button>
@@ -224,13 +224,13 @@ export const MemberForm = ({ leaders = [], initialData, onSubmitCustom, isPublic
 
           {!isPublic && (
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Nível de Geração (1 a 12)</label>
+              <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Nível de Geração (F1 a F12)</label>
               <div className="relative">
                 <ChevronDown size={18} className="absolute right-6 top-5 text-blue-400 pointer-events-none" />
                 <select {...register('generationSlot')} className="w-full px-8 py-5 rounded-4xl border-none shadow-inner outline-none focus:ring-4 focus:ring-blue-500/20 font-black text-slate-800 cursor-pointer appearance-none bg-white h-16">
                   <option value="">⏳ AGUARDANDO POSIÇÃO</option>
                   {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={`${i + 1}`}>GERAÇÃO {i + 1}</option>
+                    <option key={i + 1} value={`${i + 1}`}>{`GERAÇÃO F${i + 1}`}</option>
                   ))}
                 </select>
               </div>

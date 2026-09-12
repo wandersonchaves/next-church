@@ -59,7 +59,7 @@ const G12TreeRow = ({ node, depth, isOpen, onToggle, onPromote, loading }: {
     }
 
     // Caso contrário, é um Integrante normal de geração
-    return { text: `G${node.generationSlot}`, color: 'border-indigo-100 text-indigo-600', icon: <Users size={16} /> };
+    return { text: `F${node.generationSlot}`, color: 'border-indigo-100 text-indigo-600', icon: <Users size={16} /> };
   };
   const label = getLabel();
 

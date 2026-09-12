@@ -56,7 +56,7 @@ export default async function SurveyResponsesPage(props: { params: Promise<{ loc
                         <p className="text-sm font-black text-slate-800 leading-none">
                           {res.member ? `${res.member.firstName} ${res.member.lastName}` : 'Contato Desconhecido'}
                         </p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Geração {res.member?.generationSlot || '?'}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{res.member?.generationSlot ? `Geração F${res.member.generationSlot}` : 'Geração ?'}</p>
                       </div>
                     </div>
                     <div className="p-3 bg-white rounded-xl border border-slate-100 italic">
