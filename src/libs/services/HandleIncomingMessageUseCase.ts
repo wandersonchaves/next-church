@@ -168,7 +168,12 @@ function buildConfirmationPrompt(params: {
   if (params.address) {
     lines.push(`📍 *Endereço:* ${params.address}`);
   }
-  if (params.generation) {
+  if (
+    params.generation
+    && Number.isInteger(params.generation)
+    && params.generation >= 1
+    && params.generation <= 12
+  ) {
     lines.push(`👥 *Geração:* Geração ${params.generation}`);
   }
   if (params.ministries && params.ministries.length > 0) {
@@ -550,7 +555,10 @@ export async function handleIncomingMessageUseCase(params: {
 
         const finalEmail = pending.pendingEmail || member.email;
         const finalAddress = pending.pendingAddress || member.address;
-        const finalGeneration = pending.pendingGeneration ?? member.generationSlot;
+        const rawGeneration = pending.pendingGeneration ?? member.generationSlot;
+        const finalGeneration = (typeof rawGeneration === 'number' && Number.isInteger(rawGeneration) && rawGeneration >= 1 && rawGeneration <= 12)
+          ? rawGeneration
+          : undefined;
 
         await db
           .update(members)
@@ -559,7 +567,7 @@ export async function handleIncomingMessageUseCase(params: {
             lastName: finalLastName,
             email: finalEmail,
             address: finalAddress,
-            generationSlot: finalGeneration,
+            generationSlot: finalGeneration ?? null,
             phone: member.phone || cleanPhone,
             status: 'ACTIVE',
             deletedAt: null,
@@ -596,7 +604,7 @@ export async function handleIncomingMessageUseCase(params: {
           `📍 *Endereço:* ${finalAddress || 'Não informado'}`,
         ];
 
-        if (finalGeneration) {
+        if (finalGeneration && finalGeneration >= 1 && finalGeneration <= 12) {
           welcomeLines.push(`👥 *Geração:* Geração ${finalGeneration}`);
         }
         if (confirmedMinistries.length > 0) {
@@ -632,16 +640,30 @@ export async function handleIncomingMessageUseCase(params: {
       }
 
       // 2.2 Se informou novos dados enquanto aguardava confirmação (ex: "Natalia Chaves", "Me chamo Wanderson", "Rua Ferroviaria, 8400", "Geração 3", "Louvor")
+      let candidateName = result.detectedName;
+      if (!candidateName) {
+        const bareCandidate = extractNameFromText(content, { allowBareName: true });
+        if (
+          bareCandidate
+          && !isInvalidName(bareCandidate)
+          && removeDiacritics(bareCandidate) !== removeDiacritics(member.firstName)
+          && removeDiacritics(bareCandidate) !== removeDiacritics(memberFullName)
+        ) {
+          candidateName = bareCandidate;
+          result.detectedName = bareCandidate;
+        }
+      }
+
       const candidateMinistries = result.detectedMinistries?.filter(m => m.action === 'ADD').map(m => m.name);
       if (
-        result.detectedName
+        candidateName
         || result.detectedEmail
         || result.detectedAddress
-        || result.detectedGeneration
+        || (result.detectedGeneration && result.detectedGeneration >= 1 && result.detectedGeneration <= 12)
         || (candidateMinistries && candidateMinistries.length > 0)
       ) {
         const confirmPrompt = buildConfirmationPrompt({
-          name: result.detectedName,
+          name: candidateName,
           email: result.detectedEmail,
           address: result.detectedAddress,
           generation: result.detectedGeneration,
@@ -755,11 +777,26 @@ export async function handleIncomingMessageUseCase(params: {
     }
 
     // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro
-    // 4.1: Mudança de Nome ou Identidade Diferente (ex: "Não me chamo Gabriel, sou Wanderson Chaves")
+    // 4.1: Mudança de Nome ou Identidade Diferente (ex: "Não me chamo Gabriel, sou Wanderson Chaves", "nome: Wanderson Chaves")
+    let activeDetectedName = result.detectedName;
+    if (!activeDetectedName && !result.detectedGeneration && !result.detectedMinistries) {
+      const extractedCandidate = extractNameFromText(content);
+      if (
+        extractedCandidate
+        && !isInvalidName(extractedCandidate)
+        && removeDiacritics(extractedCandidate) !== removeDiacritics(memberFullName)
+        && removeDiacritics(extractedCandidate) !== removeDiacritics(member.firstName)
+      ) {
+        activeDetectedName = extractedCandidate;
+        result.detectedName = extractedCandidate;
+      }
+    }
+
     const isNameDifferent = Boolean(
-      result.detectedName
-      && !isInvalidName(result.detectedName)
-      && removeDiacritics(result.detectedName) !== removeDiacritics(member.firstName),
+      activeDetectedName
+      && !isInvalidName(activeDetectedName)
+      && removeDiacritics(activeDetectedName) !== removeDiacritics(memberFullName)
+      && removeDiacritics(activeDetectedName) !== removeDiacritics(member.firstName),
     );
 
     if (isNameDifferent) {

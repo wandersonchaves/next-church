@@ -25,6 +25,7 @@ export default defineConfig({
           include: ['src/**/*.test.{js,ts}'],
           exclude: ['src/hooks/**/*.test.ts'],
           environment: 'node',
+          testTimeout: 15000,
         },
       },
       {

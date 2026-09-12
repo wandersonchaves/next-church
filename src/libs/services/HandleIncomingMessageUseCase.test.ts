@@ -1368,5 +1368,170 @@ describe('handleIncomingMessageUseCase', () => {
       await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
       await db.delete(members).where(eq(members.id, testMember.id));
     });
+
+    it('handles real user multi-line data provision in AWAITING_UPDATE, updates all fields upon Sim confirmation, and clears out-of-bounds generation slot (slot 13)', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wendersonnn',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'AWAITING_UPDATE',
+          currentStep: 'DECISION',
+          lineage: '',
+          generationSlot: 13, // Out-of-bounds generation slot from legacy data
+        })
+        .returning();
+
+      const multiLineContent = [
+        'Wanderson Chaves',
+        'wandersonchavesbr14@gmail.com',
+        'Rua Ferroviaria, 8400',
+      ].join('\n');
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedName: 'Wanderson Chaves',
+        detectedEmail: 'wandersonchavesbr14@gmail.com',
+        detectedAddress: 'Rua Ferroviaria, 8400',
+        detectedOptIn: null,
+        isDifferentPerson: false,
+      });
+
+      await db.insert(notificationLogs).values({
+        organizationId: testOrgId,
+        memberId: testMember.id,
+        type: 'WHATSAPP_INCOMING',
+        status: 'RECEIVED',
+        content: multiLineContent,
+        sentAt: new Date(),
+      });
+
+      const res1 = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: multiLineContent,
+        organizationId: testOrgId,
+      });
+
+      expect(res1.status).toBe('name_updated_awaiting_opt_in');
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('👤 *Nome:* Wanderson Chaves'),
+        }),
+      );
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('📧 *E-mail:* wandersonchavesbr14@gmail.com'),
+        }),
+      );
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.not.stringContaining('Geração 13'),
+        }),
+      );
+
+      // Step 2: Member confirms with "sim"
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'CONFIRMED',
+        detectedOptIn: true,
+        isDifferentPerson: false,
+      });
+
+      await db.insert(notificationLogs).values({
+        organizationId: testOrgId,
+        memberId: testMember.id,
+        type: 'WHATSAPP_INCOMING',
+        status: 'RECEIVED',
+        content: 'sim',
+        sentAt: new Date(Date.now() + 1000),
+      });
+
+      const res2 = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'sim',
+        organizationId: testOrgId,
+      });
+
+      expect(res2.status).toBe('awaiting_update_confirmed_opt_in');
+
+      // Verify that welcome message does NOT show "Geração 13"
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.not.stringContaining('Geração 13'),
+        }),
+      );
+
+      const [updatedMember] = await db
+        .select()
+        .from(members)
+        .where(eq(members.id, testMember.id));
+
+      expect(updatedMember?.firstName).toBe('Wanderson');
+      expect(updatedMember?.lastName).toBe('Chaves');
+      expect(updatedMember?.email).toBe('wandersonchavesbr14@gmail.com');
+      expect(updatedMember?.address).toBe('Rua Ferroviaria, 8400');
+      expect(updatedMember?.generationSlot).toBeNull(); // Out-of-bounds generation slot cleaned up
+      expect(updatedMember?.status).toBe('ACTIVE');
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
+
+    it('triggers name update confirmation when active member sends "nome: Wanderson Chaves"', async () => {
+      const [testMember] = await db
+        .insert(members)
+        .values({
+          organizationId: testOrgId,
+          firstName: 'Wendersonnn',
+          lastName: 'Chaves',
+          phone: testPhone,
+          birthDate: new Date('1990-01-01'),
+          gender: 'M',
+          status: 'ACTIVE',
+          currentStep: 'DECISION',
+          lineage: '',
+        })
+        .returning();
+
+      vi.mocked(analyzeMessageWithAI).mockResolvedValue({
+        intent: 'OUTDATED_DATA',
+        detectedName: 'Wanderson Chaves',
+        detectedOptIn: null,
+        isDifferentPerson: false,
+      });
+
+      await db.insert(notificationLogs).values({
+        organizationId: testOrgId,
+        memberId: testMember.id,
+        type: 'WHATSAPP_INCOMING',
+        status: 'RECEIVED',
+        content: 'nome: Wanderson Chaves',
+        sentAt: new Date(),
+      });
+
+      const res = await handleIncomingMessageUseCase({
+        sender: testJid,
+        content: 'nome: Wanderson Chaves',
+        organizationId: testOrgId,
+      });
+
+      expect(res.status).toBe('member_data_corrected');
+      expect(WhatsAppService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: testJid,
+          message: expect.stringContaining('👤 *Nome:* Wanderson Chaves'),
+        }),
+      );
+
+      await db.delete(notificationLogs).where(eq(notificationLogs.memberId, testMember.id));
+      await db.delete(members).where(eq(members.id, testMember.id));
+    });
   });
 });

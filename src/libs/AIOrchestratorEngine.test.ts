@@ -180,6 +180,55 @@ describe('AIOrchestratorEngine', () => {
         { name: 'Intercessão', action: 'REMOVE' },
       ]);
     });
+
+    it('extracts name, email, and address from multi-line message', async () => {
+      const multiLineText = [
+        'Wanderson Chaves',
+        'wandersonchavesbr14@gmail.com',
+        'Rua Ferroviaria, 8400',
+      ].join('\n');
+
+      const result = await analyzeMessageWithAI(multiLineText, 'Wendersonnn Chaves');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedName).toBe('Wanderson Chaves');
+      expect(result.detectedEmail).toBe('wandersonchavesbr14@gmail.com');
+      expect(result.detectedAddress).toBe('Rua Ferroviaria, 8400');
+    });
+
+    it('extracts name for "nome: Wanderson Chaves" and "nome Wanderson Chaves"', async () => {
+      const res1 = await analyzeMessageWithAI('nome: Wanderson Chaves', 'Wendersonnn Chaves');
+
+      expect(res1.detectedName).toBe('Wanderson Chaves');
+      expect(res1.intent).toBe('OUTDATED_DATA');
+
+      const res2 = await analyzeMessageWithAI('nome Wanderson Chaves', 'Wendersonnn Chaves');
+
+      expect(res2.detectedName).toBe('Wanderson Chaves');
+      expect(res2.intent).toBe('OUTDATED_DATA');
+
+      const res3 = await analyzeMessageWithAI('esse é meu nome: Wanderson Chaves', 'Wendersonnn Chaves');
+
+      expect(res3.detectedName).toBe('Wanderson Chaves');
+    });
+
+    it('extracts name with suffix "Wanderson Chaves, esse é meu nome" and "Wanderson Chaves é meu nome"', async () => {
+      const res1 = await analyzeMessageWithAI('Wanderson Chaves, esse é meu nome', 'Wendersonnn Chaves');
+
+      expect(res1.detectedName).toBe('Wanderson Chaves');
+
+      const res2 = await analyzeMessageWithAI('Wanderson Chaves é meu nome', 'Wendersonnn Chaves');
+
+      expect(res2.detectedName).toBe('Wanderson Chaves');
+    });
+
+    it('recovers name from context when message is follow-up "esse é meu nome"', async () => {
+      const context = 'nome: Wanderson Chaves';
+      const result = await analyzeMessageWithAI('esse é meu nome', 'Wendersonnn Chaves', context);
+
+      expect(result.detectedName).toBe('Wanderson Chaves');
+      expect(result.intent).toBe('OUTDATED_DATA');
+    });
   });
 
   describe('AI post-processing safety guards', () => {

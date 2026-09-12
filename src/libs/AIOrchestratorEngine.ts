@@ -119,6 +119,9 @@ export const NON_NAME_WORDS = new Set([
   'rede',
   'ministerio',
   'ministério',
+  'geracao',
+  'geração',
+  'g12',
   'telepaz',
   'filadelfia',
   'filadélfia',
@@ -371,21 +374,22 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
           }
         }
 
-        // Guarda 2: Se detectedName for o mesmo primeiro nome do membro procurado ou se foi negado no texto
+        // Guarda 2: Se detectedName for o mesmo nome já cadastrado ou apenas o primeiro nome sem alterações
         if (cleanDetectedName) {
-          const cleanDetectedLower = cleanDetectedName.toLowerCase();
-          const memberFirst = memberName.trim().split(' ')[0]?.toLowerCase();
-          if (memberFirst && (cleanDetectedLower === memberFirst || cleanDetectedLower.startsWith(`${memberFirst} `))) {
+          const cleanDetectedNorm = removeDiacritics(cleanDetectedName);
+          const memberNorm = removeDiacritics(memberName.trim());
+          const memberFirst = memberNorm.split(' ')[0];
+          if (cleanDetectedNorm === memberNorm || (memberFirst && cleanDetectedNorm === memberFirst)) {
             cleanDetectedName = undefined;
           }
 
           // Se a mensagem contiver negação desse nome (ex: "Mas não me chamo Wanderson", "Não sou o Wanderson")
           if (cleanDetectedName) {
             const negatedNamePattern = new RegExp(
-              `(?:não|nao)\\s+(?:me chamo|sou|é|e|conheço|conheco|seria)\\s+(?:o\\s+|a\\s+)?${cleanDetectedLower}\\b`,
+              `(?:não|nao)\\s+(?:me chamo|sou|é|e|conheço|conheco|seria)\\s+(?:o\\s+|a\\s+)?${cleanDetectedNorm}\\b`,
               'iu',
             );
-            if (negatedNamePattern.test(messageContent.toLowerCase())) {
+            if (negatedNamePattern.test(removeDiacritics(messageContent))) {
               cleanDetectedName = undefined;
             }
           }
@@ -400,9 +404,10 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
         if (!cleanDetectedName) {
           const ruleExtracted = extractNameFromText(messageContent);
           if (ruleExtracted && !isInvalidName(ruleExtracted)) {
-            const ruleFirst = ruleExtracted.trim().split(' ')[0]?.toLowerCase();
-            const memberFirst = memberName.trim().split(' ')[0]?.toLowerCase();
-            if (ruleFirst && ruleFirst !== memberFirst) {
+            const ruleNorm = removeDiacritics(ruleExtracted);
+            const memberNorm = removeDiacritics(memberName.trim());
+            const memberFirst = memberNorm.split(' ')[0];
+            if (ruleNorm !== memberNorm && ruleNorm !== memberFirst) {
               cleanDetectedName = ruleExtracted;
             }
           }
@@ -447,14 +452,22 @@ Retorne APENAS um objeto JSON plano exatamente com a estrutura abaixo, sem forma
 }
 
 /**
- * Helper to extract person name from a message without capturing stop words.
- * @param text - Clean message text to extract name from.
+ * Helper to extract person name from a single line of text without capturing stop words.
+ * @param line - Single-line text.
  * @param options - Extraction options.
  * @param options.allowBareName - Whether bare text without presentation prefix can be considered a name.
  */
-export function extractNameFromText(text: string, options?: { allowBareName?: boolean }): string | undefined {
-  let clean = text.replace(/\[.*?\]/g, '').trim();
+function extractNameFromSingleLine(line: string, options?: { allowBareName?: boolean }): string | undefined {
+  let clean = line.replace(/\[.*?\]/g, '').trim();
   const lower = clean.toLowerCase();
+
+  // Ignora linhas que são declarações de geração ou ministérios sem prefixo de nome
+  if (
+    (extractGenerationFromText(line) !== undefined || extractMinistryActionsFromText(line).length > 0)
+    && !line.match(/(?:^|\b)(?:nome|chamo)\b/iu)
+  ) {
+    return undefined;
+  }
 
   // Pattern 1: "não me chamo X e sim Y" / "não sou X, sou Y" / "não me chamo X, me chamo Y"
   const correctedMatch = lower.match(/(?:não|nao)\s+(?:me chamo|sou|é|e)\s+(\p{L}+(?:\s+\p{L}+)*)[,.]?\s+(?:e\s+sim|mas\s+sim|sou\s+o|sou\s+a|sou|é\s+o|é\s+a|é|e|mas|aqui\s+é|aqui\s+e|me\s+chamo|chamo-me|meu\s+nome\s+é|meu\s+nome\s+e)\s+(\p{L}+(?:\s+\p{L}+)*)/iu);
@@ -468,19 +481,33 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
       return undefined;
     }
 
-    // Pattern 2: "Meu nome é Nataly" / "Me chamo Nataly" / "Meu nome é somente Nataly Chaves" / "Nome correto é X"
-    const presentationMatch = clean.match(/(?:^|\W)(?:meu nome correto [ée]|nome correto [ée]|meu nome certo [ée]|nome certo [ée]|meu nome (?:está|tá) errado|meu nome [ée]|me chamo|chamo-me|chamo|aqui [ée]|sou [ao]|sou)\s+(?:(?:somente|apenas)\s+)?(\p{L}+(?:\s+\p{L}+)*)/iu);
+    // Pattern 2: Explicit name prefixes (e.g. "nome: Wanderson", "meu nome: Wanderson", "meu nome é Wanderson", "nome completo Wanderson", "nome Wanderson")
+    const presentationMatch = clean.match(
+      /(?:^|\W)(?:(?:meu\s+)?nome(?:\s+completo)?\s*:|(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome\s*:)\s*(?:(?:somente|apenas)\s+)?(\p{L}+(?:\s+\p{L}+)*)/iu,
+    ) || clean.match(
+      /(?:^|\W)(?:meu nome completo [ée]|nome completo [ée]|nome completo|meu nome correto [ée]|nome correto [ée]|meu nome certo [ée]|nome certo [ée]|meu nome (?:está|tá) errado(?:,\s*sou)?|meu nome [ée]|me chamo|chamo-me|chamo|aqui [ée]|sou\s+[ao]|sou(?!\s+(?:de|da|do|das|dos)\b)|(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome)\s+(?:(?:somente|apenas)\s+)?(\p{L}+(?:\s+\p{L}+)*)/iu,
+    ) || clean.match(/^nome\s+(\p{L}+(?:\s+\p{L}+)*)$/iu);
+
     if (presentationMatch?.[1]) {
       clean = presentationMatch[1];
-    } else if (!options?.allowBareName) {
-      return undefined;
+    } else {
+      // Pattern 3: Suffix format (e.g. "Wanderson Chaves, esse é meu nome" / "Wanderson Chaves é meu nome")
+      const suffixMatch = clean.match(
+        /^(\p{L}+(?:\s+\p{L}+)*)[,.]?\s+(?:(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome|[ée]\s+(?:o\s+)?meu\s+nome)$/iu,
+      );
+      if (suffixMatch?.[1]) {
+        clean = suffixMatch[1];
+      } else if (!options?.allowBareName) {
+        return undefined;
+      }
     }
   }
 
   // Clean stop words and prefixes
   clean = clean
     .replace(/(?:não|nao)\s+tem\s+(?:\S.*)?$/iu, '')
-    .replace(/^(?:meu\s+nome\s+correto\s+é|meu\s+nome\s+correto\s+e|nome\s+correto\s+é|nome\s+correto\s+e|meu\s+nome\s+certo\s+é|meu\s+nome\s+certo\s+e|meu\s+nome\s+está\s+errado|meu\s+nome\s+tá\s+errado|meu\s+nome\s+é|meu\s+nome\s+e|me\s+chamo|chamo-me|chamo|sou\s+a|sou\s+o|sou|aqui\s+é|aqui\s+e|somente|apenas)\s+/iu, '')
+    .replace(/^(?:(?:meu\s+)?nome(?:\s+completo)?\s*:?|meu\s+nome\s+completo\s+[ée]|nome\s+completo\s+[ée]|meu\s+nome\s+correto\s+[ée]|nome\s+correto\s+[ée]|meu\s+nome\s+certo\s+[ée]|nome\s+certo\s+[ée]|meu\s+nome\s+(?:está|tá)\s+errado(?:,\s*sou)?|meu\s+nome\s+[ée]|me\s+chamo|chamo-me|chamo|sou\s+[ao]|sou|aqui\s+[ée]|(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome:?|somente|apenas)\s+/iu, '')
+    .replace(/[,.]?\s*(?:(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome|[ée]\s+(?:o\s+)?meu\s+nome)$/iu, '')
     .replace(/,?\s*(?:gostaria sim|gostaria|sim, pode|sim|pode mandar|aceito|quero|obrigado|obrigada).*/iu, '')
     .trim();
 
@@ -495,6 +522,67 @@ export function extractNameFromText(text: string, options?: { allowBareName?: bo
   }
 
   return undefined;
+}
+
+/**
+ * Helper to extract person name from a message without capturing stop words.
+ * Supports multi-line structured input and presentation prefixes.
+ * @param text - Clean message text to extract name from.
+ * @param options - Extraction options.
+ * @param options.allowBareName - Whether bare text without presentation prefix can be considered a name.
+ */
+export function extractNameFromText(text: string, options?: { allowBareName?: boolean }): string | undefined {
+  if (!text || typeof text !== 'string') {
+    return undefined;
+  }
+
+  // Se o texto tiver múltiplas linhas (ex: dados cadastrais enviados linha por linha)
+  if (text.includes('\n')) {
+    const lines = text
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    // Passo 1: Verifica se alguma linha contém prefixo ou correção explícita de nome
+    for (const line of lines) {
+      const extracted = extractNameFromSingleLine(line, { allowBareName: false });
+      if (extracted) {
+        return extracted;
+      }
+    }
+
+    // Passo 2: Se não encontrou prefixo explícito em nenhuma linha,
+    // verifica se alguma linha é um nome próprio (ex: "Wanderson Chaves")
+    // se a mensagem contiver outros dados de cadastro ou se allowBareName estiver ativo
+    const hasOtherRegistrationFields = (
+      lines.some(l => l.includes('@'))
+      || lines.some(l => Boolean(extractAddressFromText(l)))
+      || lines.some(l => extractGenerationFromText(l) !== undefined)
+      || lines.some(l => extractMinistryActionsFromText(l).length > 0)
+    );
+
+    if (hasOtherRegistrationFields || options?.allowBareName) {
+      for (const line of lines) {
+        if (
+          line.includes('@')
+          || extractAddressFromText(line)
+          || extractGenerationFromText(line) !== undefined
+          || extractMinistryActionsFromText(line).length > 0
+        ) {
+          continue;
+        }
+
+        const candidate = extractNameFromSingleLine(line, { allowBareName: true });
+        if (candidate) {
+          return candidate;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  return extractNameFromSingleLine(text, options);
 }
 
 /**
@@ -670,7 +758,13 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
   }
 
   // 2. Extrai nome a partir da mensagem atual antecipadamente
-  const extractedName = extractNameFromText(cleanCurrent);
+  let extractedName = extractNameFromText(cleanCurrent);
+  if (!extractedName && _fullContext) {
+    const isNameFollowUp = /(?:esse|este)\s+[ée]\s+(?:o\s+)?meu\s+nome|[ée]\s+(?:o\s+)?meu\s+nome|meu\s+nome/iu.test(normalizedCurrent);
+    if (isNameFollowUp) {
+      extractedName = extractNameFromText(_fullContext);
+    }
+  }
 
   // 3. Recusa explícita de mensagens ("não quero receber", "não envie mais", "parar", "stop", "sair")
   const explicitOptOutPhrases = [
@@ -861,6 +955,12 @@ function ruleBasedAnalysis(currentText: string, _fullContext?: string): AIExtrac
     'chamo-me',
     'nome correto',
     'nome certo',
+    'nome:',
+    'nome ',
+    'esse e meu nome',
+    'esse e o meu nome',
+    'este e meu nome',
+    'e meu nome',
   ];
 
   for (const kw of updateKeywords) {
