@@ -1,5 +1,5 @@
 import { and, eq, gte, ilike, isNull, or } from 'drizzle-orm';
-import { analyzeMessageWithAI } from '@/libs/AIOrchestratorEngine';
+import { analyzeMessageWithAI, extractNameFromText, isInvalidName } from '@/libs/AIOrchestratorEngine';
 import { db } from '@/libs/DB';
 import { NotificationService } from '@/libs/services/NotificationService';
 import { WhatsAppService } from '@/libs/services/WhatsAppService';
@@ -7,11 +7,11 @@ import { auditLogs, members, notificationLogs } from '@/models/Schema';
 
 /**
  * Logs a system-level activity to audit logs since Clerk's auth() is unavailable in background tasks.
- * @param params
- * @param params.organizationId
- * @param params.action
- * @param params.entityType
- * @param params.entityName
+ * @param params - Audit payload parameters.
+ * @param params.organizationId - Target organization ID.
+ * @param params.action - Mutation action type.
+ * @param params.entityType - Affected entity domain.
+ * @param params.entityName - Human-readable entity description.
  */
 async function logSystemActivity(params: {
   organizationId: string;
@@ -35,18 +35,240 @@ async function logSystemActivity(params: {
 
 /**
  * Normalizes a phone number to digits only, removing JID suffix if present.
- * @param phone
+ * @param phone - Phone number or WhatsApp JID.
  */
 function cleanPhoneDigits(phone: string): string {
   return phone.split('@')[0].replace(/\D/g, '');
 }
 
 /**
+ * Checks whether an incoming message is an explicit opt-out request from communications.
+ * @param text - Raw message string.
+ * @returns True if text explicitly requests to stop receiving messages.
+ */
+export function isExplicitOptOutMessage(text: string): boolean {
+  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+  const optOutPhrases = [
+    'parar',
+    'stop',
+    'sair',
+    'não quero receber',
+    'nao quero receber',
+    'não quero mais receber',
+    'nao quero mais receber',
+    'não envie mais',
+    'nao envie mais',
+    'não mande mais',
+    'nao mande mais',
+    'não mande mensagem',
+    'nao mande mensagem',
+    'não envie mensagem',
+    'nao envie mensagem',
+    'não quero mensagens',
+    'nao quero mensagens',
+    'não quero mais mensagens',
+    'nao quero mais mensagens',
+    'remova meu número',
+    'remova meu numero',
+    'remover meu número',
+    'remover meu numero',
+    'remova meu contato',
+    'remover meu contato',
+    'tire meu número',
+    'tire meu numero',
+    'cancele mensagens',
+    'cancelar mensagens',
+    'cancelar comunicacao',
+    'cancelar comunicação',
+  ];
+
+  return optOutPhrases.some(phrase =>
+    clean === phrase
+    || clean.startsWith(`${phrase} `)
+    || clean.endsWith(` ${phrase}`)
+    || clean.includes(phrase),
+  );
+}
+
+/**
+ * Checks whether the incoming message contests or rejects candidate registration data.
+ * @param text - Raw message string.
+ * @returns True if the message contests data without being an opt-out.
+ */
+export function isDataContestation(text: string): boolean {
+  const clean = text.replace(/\[.*?\]/g, '').trim().toLowerCase();
+  if (
+    clean === 'não'
+    || clean === 'nao'
+    || clean === 'não não'
+    || clean === 'nao nao'
+  ) {
+    return true;
+  }
+
+  const contestationPhrases = [
+    'está errado',
+    'esta errado',
+    'tá errado',
+    'ta errado',
+    'não está certo',
+    'nao esta certo',
+    'não tá certo',
+    'nao ta certo',
+    'não confirmo',
+    'nao confirmo',
+    'dados errados',
+    'dados incorretos',
+    'nome errado',
+    'não é esse',
+    'nao e esse',
+    'não é esse nome',
+    'nao e esse nome',
+    'informação errada',
+    'informacao errada',
+    'incorreto',
+  ];
+
+  return contestationPhrases.some(phrase => clean.includes(phrase));
+}
+
+/**
+ * Builds the WhatsApp confirmation prompt requesting member confirmation of updated data and opt-in consent.
+ * @param params - Candidate fields to confirm.
+ * @param params.name - Proposed member name.
+ * @param params.email - Proposed member email.
+ * @param params.address - Proposed member address.
+ * @returns Formatted prompt string for WhatsApp.
+ */
+function buildConfirmationPrompt(params: {
+  name?: string;
+  email?: string;
+  address?: string;
+}): string {
+  const lines: string[] = [
+    'Pedimos sinceras desculpas pelo engano! 🙏',
+    '',
+    'Identificamos a seguinte solicitação de atualização no cadastro:',
+  ];
+
+  if (params.name) {
+    lines.push(`👤 *Nome:* ${params.name}`);
+  }
+  if (params.email) {
+    lines.push(`📧 *E-mail:* ${params.email}`);
+  }
+  if (params.address) {
+    lines.push(`📍 *Endereço:* ${params.address}`);
+  }
+
+  lines.push('');
+  lines.push('Você confirma esses dados e gostaria de continuar recebendo mensagens e programações da nossa igreja por aqui?');
+  lines.push('');
+  lines.push('• Responda *Sim* para confirmar.');
+  lines.push('• Se algum dado estiver incorreto, envie a *correção*.');
+  lines.push('• Responda *Parar* caso não queira receber nossas mensagens.');
+
+  return lines.join('\n');
+}
+
+/**
+ * Extracts proposed registration values from a previous confirmation prompt message.
+ * @param content - Text content of the prompt message.
+ */
+function extractPendingDataFromPrompt(content: string): {
+  pendingName?: string;
+  pendingEmail?: string;
+  pendingAddress?: string;
+} {
+  let pendingName: string | undefined;
+  let pendingEmail: string | undefined;
+  let pendingAddress: string | undefined;
+
+  const nameMatch = content.match(/👤\s*\*Nome:\*\s*([^\n]+)/iu);
+  if (nameMatch?.[1]) {
+    const raw = nameMatch[1].trim();
+    if (raw && !isInvalidName(raw)) {
+      pendingName = raw;
+    }
+  }
+
+  const emailMatch = content.match(/📧\s*\*E-mail:\*\s*([^\n]+)/iu);
+  if (emailMatch?.[1] && !emailMatch[1].includes('Não informado')) {
+    pendingEmail = emailMatch[1].trim();
+  }
+
+  const addressMatch = content.match(/📍\s*\*Endereço:\*\s*([^\n]+)/iu);
+  if (addressMatch?.[1] && !addressMatch[1].includes('Não informado')) {
+    pendingAddress = addressMatch[1].trim();
+  }
+
+  return { pendingName, pendingEmail, pendingAddress };
+}
+
+/**
+ * Fallback to extract pending data from recent notification logs.
+ * @param logs - Array of recent notification logs.
+ */
+function extractPendingDataFromLogs(logs: Array<{ content: string; type: string }>): {
+  pendingName?: string;
+  pendingEmail?: string;
+  pendingAddress?: string;
+} {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const log = logs[i];
+    if (log && log.type === 'WHATSAPP_OUTGOING') {
+      const parsed = extractPendingDataFromPrompt(log.content);
+      if (parsed.pendingName || parsed.pendingEmail || parsed.pendingAddress) {
+        return parsed;
+      }
+    }
+  }
+
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const log = logs[i];
+    if (log && log.type === 'WHATSAPP_INCOMING') {
+      const extracted = extractNameFromText(log.content);
+      if (extracted && !isInvalidName(extracted)) {
+        return { pendingName: extracted };
+      }
+    }
+  }
+
+  return {};
+}
+
+/**
+ * Sends a WhatsApp message and persists it to notification logs.
+ * @param params - Message sending payload.
+ * @param params.phone - Recipient phone or WhatsApp JID.
+ * @param params.message - Message text content.
+ * @param params.organizationId - Organization tenant ID.
+ */
+async function sendAndLogWhatsAppMessage(params: {
+  phone: string;
+  message: string;
+  organizationId: string;
+}): Promise<void> {
+  await WhatsAppService.sendMessage({
+    phone: params.phone,
+    message: params.message,
+    organizationId: params.organizationId,
+  });
+
+  await NotificationService.saveOutgoingMessage({
+    phone: params.phone,
+    content: params.message,
+    organizationId: params.organizationId,
+    status: 'SENT',
+  });
+}
+
+/**
  * Core use case to handle conversational validation and auto-correction of member registration.
- * @param params
- * @param params.sender
- * @param params.content
- * @param params.organizationId
+ * @param params - Incoming message parameters.
+ * @param params.sender - WhatsApp JID of sender.
+ * @param params.content - Text content received.
+ * @param params.organizationId - Tenant organization ID.
  */
 export async function handleIncomingMessageUseCase(params: {
   sender: string; // WhatsApp JID (e.g., 5586994037788@s.whatsapp.net)
@@ -60,10 +282,26 @@ export async function handleIncomingMessageUseCase(params: {
   // 1. Resolve o membro pelo número de telefone
   const member = await NotificationService.findMemberByPhone(sender);
 
-  // 🛑 TRAVA DE DUPLICIDADE: Se já enviamos uma resposta recente (últimos 15 segundos) para esse membro/remetente, ignora execução duplicada (evita envio duplo Direct + Inngest)
-  const recentReplyWindow = new Date(Date.now() - 15 * 1000);
+  // 🛑 TRAVA DE DUPLICIDADE: Se a última mensagem recebida já foi respondida (evita envio duplo Direct + Inngest)
   const cleanPhone = cleanPhoneDigits(sender);
-  const recentOutgoing = await db.query.notificationLogs.findFirst({
+  const latestIncoming = await db.query.notificationLogs.findFirst({
+    where: and(
+      eq(notificationLogs.organizationId, organizationId),
+      eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
+      member?.id
+        ? eq(notificationLogs.memberId, member.id)
+        : or(
+            ilike(notificationLogs.content, `[De: ${cleanPhone}]%`),
+            ilike(notificationLogs.content, `[De: ${sender.split('@')[0]}]%`),
+          ),
+    ),
+    orderBy: (log, { desc }) => [desc(log.sentAt)],
+  });
+
+  const recentReplyWindow = new Date(Date.now() - 15 * 1000);
+  const outgoingThreshold = latestIncoming?.sentAt ?? recentReplyWindow;
+
+  const alreadyReplied = await db.query.notificationLogs.findFirst({
     where: and(
       eq(notificationLogs.organizationId, organizationId),
       eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
@@ -73,17 +311,17 @@ export async function handleIncomingMessageUseCase(params: {
             ilike(notificationLogs.content, `[Para: ${cleanPhone}]%`),
             ilike(notificationLogs.content, `[Para: ${sender.split('@')[0]}]%`),
           ),
-      gte(notificationLogs.sentAt, recentReplyWindow),
+      gte(notificationLogs.sentAt, outgoingThreshold),
     ),
   });
 
-  if (recentOutgoing) {
-    console.warn(`[HANDLE_INCOMING_MSG] >>> SKIP: Recent outgoing message already sent to ${sender} within last 15s.`);
+  if (alreadyReplied) {
+    console.warn(`[HANDLE_INCOMING_MSG] >>> SKIP: Recent outgoing message already sent to ${sender}.`);
     return { status: 'skipped_recent_outgoing' };
   }
 
-  // 2. Busca histórico recente de mensagens nos últimos 5 minutos para acumular contexto
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  // 2. Busca histórico recente de mensagens nos últimos 15 minutos para acumular contexto
+  const contextWindow = new Date(Date.now() - 15 * 60 * 1000);
   let recentLogs: any[] = [];
 
   if (member) {
@@ -92,8 +330,7 @@ export async function handleIncomingMessageUseCase(params: {
       .from(notificationLogs)
       .where(and(
         eq(notificationLogs.memberId, member.id),
-        eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
-        gte(notificationLogs.sentAt, fiveMinutesAgo),
+        gte(notificationLogs.sentAt, contextWindow),
       ))
       .orderBy(notificationLogs.sentAt);
   } else {
@@ -103,16 +340,16 @@ export async function handleIncomingMessageUseCase(params: {
       .from(notificationLogs)
       .where(and(
         isNull(notificationLogs.memberId),
-        eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
         ilike(notificationLogs.content, `[De: ${cleanPhone}]%`),
-        gte(notificationLogs.sentAt, fiveMinutesAgo),
+        gte(notificationLogs.sentAt, contextWindow),
       ))
       .orderBy(notificationLogs.sentAt);
   }
 
-  // Combina as mensagens recentes
-  const combinedContent = recentLogs.length > 0
-    ? recentLogs.map(log => log.content).join('\n')
+  // Combina apenas as mensagens recebidas para passar à IA
+  const incomingLogs = recentLogs.filter(log => log.type === 'WHATSAPP_INCOMING');
+  const combinedContent = incomingLogs.length > 0
+    ? incomingLogs.map(log => log.content).join('\n')
     : content;
 
   console.warn(`[HANDLE_INCOMING_MSG] Context: ${combinedContent}`);
@@ -126,23 +363,26 @@ export async function handleIncomingMessageUseCase(params: {
     console.warn(`[HANDLE_INCOMING_MSG] Found member: ${memberFullName} (Status: ${currentStatus})`);
 
     const result = await analyzeMessageWithAI(content, memberFullName, combinedContent);
+    if (result.detectedName && isInvalidName(result.detectedName)) {
+      result.detectedName = undefined;
+    }
     console.warn(`[HANDLE_INCOMING_MSG] AI Intent analysis result:`, result);
 
-    // 🛑 REGRA 1: Opt-Out Imediato (Se a pessoa disse "não", "não quero", "não envie", "parar")
-    if (result.detectedOptIn === false) {
-      let updatedFirstName = member.firstName;
-      let updatedLastName = member.lastName;
-      if (result.detectedName) {
-        const parts = result.detectedName.trim().split(' ');
-        updatedFirstName = parts[0] || member.firstName;
-        updatedLastName = parts.slice(1).join(' ') || member.lastName;
-      }
+    // 🛑 REGRA 1: Opt-Out Imediato
+    const explicitOptOut = isExplicitOptOutMessage(content);
+    const dataContestation = isDataContestation(content);
 
+    // Somente aciona se for uma recusa explícita de comunicação ("Parar", "Não quero receber mensagens", etc.)
+    // NUNCA acionar se for contestação de dados ou se um novo nome tiver sido detectado!
+    const shouldOptOut = (
+      explicitOptOut
+      || (result.detectedOptIn === false && !dataContestation && !result.detectedName)
+    );
+
+    if (shouldOptOut) {
       await db
         .update(members)
         .set({
-          firstName: updatedFirstName,
-          lastName: updatedLastName,
           status: 'UPDATED',
           deletedAt: new Date(),
           updatedAt: new Date(),
@@ -153,12 +393,12 @@ export async function handleIncomingMessageUseCase(params: {
         organizationId,
         action: 'UPDATE',
         entityType: 'MEMBER',
-        entityName: `Membro ${updatedFirstName} ${updatedLastName} optou por não receber mensagens (Opt-Out registrado)`,
+        entityName: `Membro ${memberFullName} optou por não receber mensagens (Opt-Out registrado)`,
       });
 
       const optOutMsg = `Compreendido perfeitamente! Respeitamos sua escolha e não enviaremos mais mensagens por aqui. Se precisar de algo no futuro, estaremos sempre à disposição. Tenha um excelente dia! 🙏`;
 
-      await WhatsAppService.sendMessage({
+      await sendAndLogWhatsAppMessage({
         phone: sender,
         message: optOutMsg,
         organizationId,
@@ -167,20 +407,51 @@ export async function handleIncomingMessageUseCase(params: {
       return { status: 'handled_opt_out' };
     }
 
-    // 🔄 REGRA 2: Membro em AWAITING_UPDATE (aguardando dados da nova pessoa ou resposta de opt-in)
+    // 🔄 REGRA 2: Membro em AWAITING_UPDATE (aguardando confirmação dos dados ou resposta de opt-in)
     if (currentStatus === 'AWAITING_UPDATE') {
-      // 2.1 Se confirmou Opt-In ("Sim", "Gostaria de receber", "Pode mandar", "Aceito")
+      // 2.1 Se confirmou Opt-In / Atualização ("Sim", "Confirmo", "Pode mandar", "Aceito", "Gostaria sim")
       if (result.detectedOptIn === true || result.intent === 'CONFIRMED') {
-        const displayName = `${member.firstName} ${member.lastName}`.trim();
+        const lastPromptLog = await db.query.notificationLogs.findFirst({
+          where: and(
+            eq(notificationLogs.organizationId, organizationId),
+            eq(notificationLogs.memberId, member.id),
+            eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
+            ilike(notificationLogs.content, '%Identificamos a seguinte solicitação%'),
+          ),
+          orderBy: (log, { desc }) => [desc(log.sentAt)],
+        });
+
+        const pending = lastPromptLog
+          ? extractPendingDataFromPrompt(lastPromptLog.content)
+          : extractPendingDataFromLogs(recentLogs);
+
+        let finalFirstName = member.firstName;
+        let finalLastName = member.lastName;
+
+        if (pending.pendingName) {
+          const parts = pending.pendingName.trim().split(' ');
+          finalFirstName = parts[0] || member.firstName;
+          finalLastName = parts.slice(1).join(' ') || '';
+        }
+
+        const finalEmail = pending.pendingEmail || member.email;
+        const finalAddress = pending.pendingAddress || member.address;
 
         await db
           .update(members)
           .set({
+            firstName: finalFirstName,
+            lastName: finalLastName,
+            email: finalEmail,
+            address: finalAddress,
+            phone: member.phone || cleanPhone,
             status: 'ACTIVE',
             deletedAt: null,
             updatedAt: new Date(),
           })
           .where(eq(members.id, member.id));
+
+        const displayName = `${finalFirstName} ${finalLastName}`.trim();
 
         await logSystemActivity({
           organizationId,
@@ -190,17 +461,17 @@ export async function handleIncomingMessageUseCase(params: {
         });
 
         const welcomeMessage = [
-          `🙌 *Cadastro Atualizado!* Obrigado por nos ajudar a manter seus dados corretos.`,
+          `🙌 *Cadastro Atualizado e Confirmado!* Obrigado por nos ajudar a manter seus dados corretos.`,
           ``,
           `Confirmamos os seguintes dados no sistema:`,
           `👤 *Nome:* ${displayName}`,
-          `📧 *E-mail:* ${member.email || 'Não informado'}`,
-          `📍 *Endereço:* ${member.address || 'Não informado'}`,
+          `📧 *E-mail:* ${finalEmail || 'Não informado'}`,
+          `📍 *Endereço:* ${finalAddress || 'Não informado'}`,
           ``,
           `Seja muito bem-vindo(a)! Que Deus abençoe sua vida! ✨`,
         ].join('\n');
 
-        await WhatsAppService.sendMessage({
+        await sendAndLogWhatsAppMessage({
           phone: sender,
           message: welcomeMessage,
           organizationId,
@@ -209,86 +480,57 @@ export async function handleIncomingMessageUseCase(params: {
         return { status: 'awaiting_update_confirmed_opt_in' };
       }
 
-      // 2.2 Se informou nome (ex: "Natalia Chaves", "Me chamo Carlos", etc.)
-      if (result.detectedName) {
-        const parts = result.detectedName.trim().split(' ');
-        const visitorFirstName = parts[0] || member.firstName;
-        const visitorLastName = parts.slice(1).join(' ') || '';
-
-        await db
-          .update(members)
-          .set({
-            firstName: visitorFirstName,
-            lastName: visitorLastName,
-            email: result.detectedEmail || null,
-            phone: member.phone || cleanPhone,
-            status: 'AWAITING_UPDATE',
-            deletedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
+      // 2.2 Se informou novos dados enquanto aguardava confirmação (ex: "Natalia Chaves", "Me chamo Wanderson")
+      if (result.detectedName || result.detectedEmail || result.detectedAddress) {
+        const confirmPrompt = buildConfirmationPrompt({
+          name: result.detectedName,
+          email: result.detectedEmail,
+          address: result.detectedAddress,
+        });
 
         await logSystemActivity({
           organizationId,
           action: 'UPDATE',
           entityType: 'MEMBER',
-          entityName: `Nome atualizado para ${visitorFirstName} ${visitorLastName} (aguardando confirmação)`,
+          entityName: `Aguardando confirmação para atualizar cadastro de ${memberFullName}`,
         });
 
-        const displayName = `${visitorFirstName} ${visitorLastName}`.trim();
-        const promptOptInMsg = `Pedimos sinceras desculpas pelo engano! 🙏 Já ajustamos seu nome no sistema.\n\nPrazer em conhecer você, *${displayName}*! 😊 Você gostaria de continuar recebendo nossas mensagens, novidades e convites da igreja por aqui?`;
-
-        await WhatsAppService.sendMessage({
+        await sendAndLogWhatsAppMessage({
           phone: sender,
-          message: promptOptInMsg,
+          message: confirmPrompt,
           organizationId,
         });
 
         return { status: 'name_updated_awaiting_opt_in' };
       }
-    }
 
-    // ⚠️ REGRA 3: Mensagem de Número Errado Inicial (WRONG_NUMBER)
-    if (result.intent === 'WRONG_NUMBER') {
-      // Se já veio com o nome novo na mesma frase (ex: "Não me chamo Beatriz, sou o João")
-      if (result.detectedName) {
-        const parts = result.detectedName.trim().split(' ');
-        const visitorFirstName = parts[0] || 'Visitante';
-        const visitorLastName = parts.slice(1).join(' ') || '';
-
-        await db
-          .update(members)
-          .set({
-            firstName: visitorFirstName,
-            lastName: visitorLastName,
-            email: result.detectedEmail || null,
-            phone: member.phone || cleanPhone,
-            status: 'AWAITING_UPDATE',
-            deletedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(members.id, member.id));
+      // 2.3 Se contestou os dados ou disse "Não" sem enviar a informação correta ainda
+      if (dataContestation || result.intent === 'OUTDATED_DATA') {
+        const clarificationMsg = [
+          'Pedimos sinceras desculpas pelo erro! 🙏',
+          '',
+          'Como deveríamos registrar seu nome completo, e-mail ou endereço corretamente? Por favor, envie a informação correta para atualizarmos seu cadastro.',
+        ].join('\n');
 
         await logSystemActivity({
           organizationId,
           action: 'UPDATE',
           entityType: 'MEMBER',
-          entityName: `Nome do cadastro corrigido para ${visitorFirstName} ${visitorLastName} via mensagem inicial`,
+          entityName: `Membro ${memberFullName} contestou os dados em confirmação. Solicitado envio dos dados corretos.`,
         });
 
-        const displayName = `${visitorFirstName} ${visitorLastName}`.trim();
-        const askOptInMsg = `Pedimos sinceras desculpas pelo engano! 🙏 Já ajustamos seu nome no sistema.\n\nPrazer em conhecer você, *${displayName}*! 😊 Você gostaria de continuar recebendo nossas mensagens, novidades e convites da igreja por aqui?`;
-
-        await WhatsAppService.sendMessage({
+        await sendAndLogWhatsAppMessage({
           phone: sender,
-          message: askOptInMsg,
+          message: clarificationMsg,
           organizationId,
         });
 
-        return { status: 'handled_wrong_number_with_name' };
+        return { status: 'awaiting_data_clarification' };
       }
+    }
 
-      // Se apenas avisou que não é a pessoa procurada sem fornecer o novo nome
+    // ⚠️ REGRA 3: Mensagem de Número Errado Inicial (WRONG_NUMBER)
+    if (result.intent === 'WRONG_NUMBER') {
       await db
         .update(members)
         .set({
@@ -299,6 +541,29 @@ export async function handleIncomingMessageUseCase(params: {
         })
         .where(eq(members.id, member.id));
 
+      if (result.detectedName || result.detectedEmail || result.detectedAddress) {
+        const confirmPrompt = buildConfirmationPrompt({
+          name: result.detectedName,
+          email: result.detectedEmail,
+          address: result.detectedAddress,
+        });
+
+        await logSystemActivity({
+          organizationId,
+          action: 'UPDATE',
+          entityType: 'MEMBER',
+          entityName: `Aguardando confirmação para atualizar cadastro de ${memberFullName} para ${result.detectedName || 'novos dados'}`,
+        });
+
+        await sendAndLogWhatsAppMessage({
+          phone: sender,
+          message: confirmPrompt,
+          organizationId,
+        });
+
+        return { status: 'handled_wrong_number_with_name' };
+      }
+
       await logSystemActivity({
         organizationId,
         action: 'UPDATE',
@@ -306,9 +571,9 @@ export async function handleIncomingMessageUseCase(params: {
         entityName: `Cadastro de ${memberFullName} colocado em AWAITING_UPDATE para identificação da nova pessoa`,
       });
 
-      const askNameMsg = `Pedimos sinceras desculpas pelo engano! 🙏 Já estamos atualizando seu cadastro.\n\nPoderia nos dizer qual é o seu nome? E você gostaria de continuar recebendo mensagens e convites da nossa igreja por aqui?`;
+      const askNameMsg = `Pedimos sinceras desculpas pelo engano! 🙏 Já estamos atualizando seu cadastro.\n\nPoderia nos dizer qual é o seu nome completo? E você gostaria de continuar recebendo mensagens e convites da nossa igreja por aqui?`;
 
-      await WhatsAppService.sendMessage({
+      await sendAndLogWhatsAppMessage({
         phone: sender,
         message: askNameMsg,
         organizationId,
@@ -320,6 +585,7 @@ export async function handleIncomingMessageUseCase(params: {
     // ✏️ REGRA 4: Dados Desatualizados / Atualização de Cadastro (OUTDATED_DATA ou correção de nome)
     const isNameDifferent = Boolean(
       result.detectedName
+      && !isInvalidName(result.detectedName)
       && result.detectedName.trim().toLowerCase() !== member.firstName.trim().toLowerCase(),
     );
 
@@ -348,7 +614,7 @@ export async function handleIncomingMessageUseCase(params: {
 
         const responseMsg = `Peço desculpas pelo transtorno! Qual seria o seu nome completo, e-mail ou endereço atualizado para que possamos corrigir no seu cadastro aqui?`;
 
-        await WhatsAppService.sendMessage({
+        await sendAndLogWhatsAppMessage({
           phone: sender,
           message: responseMsg,
           organizationId,
@@ -357,36 +623,14 @@ export async function handleIncomingMessageUseCase(params: {
         return { status: 'awaiting_update_prompt_sent' };
       }
 
-      let updatedFirstName = member.firstName;
-      let updatedLastName = member.lastName;
-
-      if (result.detectedName) {
-        const parts = result.detectedName.trim().split(' ');
-        const newFirst = parts[0] || member.firstName;
-        const newLast = parts.slice(1).join(' ');
-
-        updatedFirstName = newFirst;
-        if (newLast) {
-          updatedLastName = newLast;
-        } else if (newFirst.toLowerCase() !== member.firstName.toLowerCase()) {
-          updatedLastName = '';
-        } else {
-          updatedLastName = (member.lastName.includes('(F') || member.lastName === 'Contato' ? '' : member.lastName);
-        }
-      }
-
-      const emailToUpdate = result.detectedEmail !== undefined ? result.detectedEmail : member.email;
-      const addressToUpdate = result.detectedAddress !== undefined ? result.detectedAddress : member.address;
-
+      // Se enviou detalhes (ex: "Não me chamo Gabriel, sou Wanderson Chaves", "Meu nome é Natalia"):
+      // Define status como AWAITING_UPDATE e envia solicitação de confirmação com Opt-In
+      // SEM alterar o nome ou dados no banco antes da confirmação do usuário!
       await db
         .update(members)
         .set({
-          firstName: updatedFirstName,
-          lastName: updatedLastName,
-          email: emailToUpdate,
-          address: addressToUpdate,
           phone: member.phone || cleanPhone,
-          status: 'ACTIVE',
+          status: 'AWAITING_UPDATE',
           deletedAt: null,
           updatedAt: new Date(),
         })
@@ -396,24 +640,18 @@ export async function handleIncomingMessageUseCase(params: {
         organizationId,
         action: 'UPDATE',
         entityType: 'MEMBER',
-        entityName: `Cadastro atualizado: ${updatedFirstName} ${updatedLastName}`.trim(),
+        entityName: `Aguardando confirmação para atualização de cadastro de ${memberFullName}`,
       });
 
-      const displayName = `${updatedFirstName} ${updatedLastName}`.trim();
-      const confirmationMessage = [
-        `🙌 *Cadastro Atualizado!* Obrigado por nos ajudar a manter seus dados corretos.`,
-        ``,
-        `Confirmamos os seguintes dados no sistema:`,
-        `👤 *Nome:* ${displayName}`,
-        `📧 *E-mail:* ${emailToUpdate || 'Não informado'}`,
-        `📍 *Endereço:* ${addressToUpdate || 'Não informado'}`,
-        ``,
-        `Seja muito bem-vindo(a)! Que Deus abençoe sua vida! ✨`,
-      ].join('\n');
+      const confirmPrompt = buildConfirmationPrompt({
+        name: result.detectedName,
+        email: result.detectedEmail,
+        address: result.detectedAddress,
+      });
 
-      await WhatsAppService.sendMessage({
+      await sendAndLogWhatsAppMessage({
         phone: sender,
-        message: confirmationMessage,
+        message: confirmPrompt,
         organizationId,
       });
 

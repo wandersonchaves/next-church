@@ -166,18 +166,20 @@ export const NotificationService = {
         }
       }
 
-      const recentWindow = new Date(Date.now() - 10 * 1000);
+      const recentWindow = new Date(Date.now() - 4 * 1000);
+      const incomingContent = `${!member ? `[De: ${sender.split('@')[0]}] ` : ''}${content}`;
       const recentDuplicate = await db.query.notificationLogs.findFirst({
         where: and(
           eq(notificationLogs.organizationId, String(orgId)),
           eq(notificationLogs.type, 'WHATSAPP_INCOMING'),
+          eq(notificationLogs.content, incomingContent),
           member?.id ? eq(notificationLogs.memberId, member.id) : ilike(notificationLogs.content, `[De: ${sender.split('@')[0]}]%`),
           gte(notificationLogs.sentAt, recentWindow),
         ),
       });
 
       if (recentDuplicate) {
-        console.warn(`[NOTIFICATION_SERVICE] >>> SKIP: Duplicate incoming message from ${sender} within last 10s.`);
+        console.warn(`[NOTIFICATION_SERVICE] >>> SKIP: Duplicate incoming message content from ${sender} within last 4s.`);
         return {
           success: true,
           organizationId: String(orgId),

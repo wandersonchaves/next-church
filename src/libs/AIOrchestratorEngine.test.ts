@@ -1,0 +1,222 @@
+import { describe, expect, it, vi } from 'vitest';
+import { analyzeMessageWithAI } from './AIOrchestratorEngine';
+
+vi.mock('@/libs/Env', () => ({
+  Env: {
+    OPENROUTER_API_KEY: '',
+    OPENROUTER_MODEL: '',
+  },
+}));
+
+describe('AIOrchestratorEngine', () => {
+  describe('ruleBasedAnalysis / fallback flow', () => {
+    it('does not extract name on pure negation "Não me chamo Gabriel"', async () => {
+      const result = await analyzeMessageWithAI('Não me chamo Gabriel', 'Gabriel');
+
+      expect(result.intent).toBe('WRONG_NUMBER');
+      expect(result.detectedName).toBeUndefined();
+      expect(result.isDifferentPerson).toBe(true);
+    });
+
+    it('extracts corrected name and leaves detectedOptIn as null for "Nao me chamo Gabriel, e sim Wanderson"', async () => {
+      const result = await analyzeMessageWithAI('Nao me chamo Gabriel, e sim Wanderson', 'Gabriel');
+
+      expect(result.intent).toBe('WRONG_NUMBER');
+      expect(result.detectedName).toBe('Wanderson');
+      expect(result.detectedOptIn).toBeNull();
+      expect(result.isDifferentPerson).toBe(true);
+    });
+
+    it('extracts name for "Me chamo Wanderson"', async () => {
+      const result = await analyzeMessageWithAI('Me chamo Wanderson', 'Gabriel');
+
+      expect(result.detectedName).toBe('Wanderson');
+    });
+
+    it('extracts name for "Meu nome é Wanderson Chaves"', async () => {
+      const result = await analyzeMessageWithAI('Meu nome é Wanderson Chaves', 'Gabriel');
+
+      expect(result.detectedName).toBe('Wanderson Chaves');
+    });
+
+    it('detects opt-in for "Sim"', async () => {
+      const result = await analyzeMessageWithAI('Sim', 'Wanderson');
+
+      expect(result.intent).toBe('CONFIRMED');
+      expect(result.detectedOptIn).toBe(true);
+    });
+
+    it('does not extract name for "Amém" or "Amem" and classifies as OTHER', async () => {
+      const res1 = await analyzeMessageWithAI('Amém', 'Danilo');
+
+      expect(res1.intent).toBe('OTHER');
+      expect(res1.detectedName).toBeUndefined();
+
+      const res2 = await analyzeMessageWithAI('Amem', 'Danilo');
+
+      expect(res2.intent).toBe('OTHER');
+      expect(res2.detectedName).toBeUndefined();
+
+      const res3 = await analyzeMessageWithAI('Amém 🙏', 'Danilo');
+
+      expect(res3.intent).toBe('OTHER');
+      expect(res3.detectedName).toBeUndefined();
+    });
+
+    it('does not extract name for religious phrases like "Deus abençoe" or "Glória a Deus"', async () => {
+      const res1 = await analyzeMessageWithAI('Deus abençoe', 'Danilo');
+
+      expect(res1.detectedName).toBeUndefined();
+
+      const res2 = await analyzeMessageWithAI('Glória a Deus', 'Danilo');
+
+      expect(res2.detectedName).toBeUndefined();
+    });
+
+    it('detects opt-out for "Não quero receber nada"', async () => {
+      const result = await analyzeMessageWithAI('Não quero receber nada', 'Wanderson');
+
+      expect(result.detectedOptIn).toBe(false);
+    });
+
+    it('detects opt-out for "Parar"', async () => {
+      const result = await analyzeMessageWithAI('Parar', 'Wanderson');
+
+      expect(result.detectedOptIn).toBe(false);
+    });
+
+    it('classifies "Não, está errado" as OUTDATED_DATA with detectedOptIn: null', async () => {
+      const result = await analyzeMessageWithAI('Não, está errado', 'Wanderson');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedOptIn).toBeNull();
+      expect(result.detectedName).toBeUndefined();
+    });
+
+    it('classifies standalone "Não" as OUTDATED_DATA with detectedOptIn: null rather than opt-out', async () => {
+      const result = await analyzeMessageWithAI('Não', 'Wanderson');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedOptIn).toBeNull();
+      expect(result.detectedName).toBeUndefined();
+    });
+
+    it('classifies "Não confirmo" as OUTDATED_DATA with detectedOptIn: null', async () => {
+      const result = await analyzeMessageWithAI('Não confirmo', 'Wanderson');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedOptIn).toBeNull();
+    });
+
+    it('extracts name for "Não, meu nome é Carlos" with detectedOptIn: null', async () => {
+      const result = await analyzeMessageWithAI('Não, meu nome é Carlos', 'Wanderson');
+
+      expect(result.intent).toBe('OUTDATED_DATA');
+      expect(result.detectedName).toBe('Carlos');
+      expect(result.detectedOptIn).toBeNull();
+    });
+  });
+
+  describe('AI post-processing safety guards', () => {
+    it('discards hallucinated member name when message is pure negation', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                intent: 'WRONG_NUMBER',
+                detectedName: 'Gabriel',
+                detectedOptIn: null,
+                isDifferentPerson: true,
+              }),
+            },
+          }],
+        })),
+      }));
+
+      const { Env } = await import('@/libs/Env');
+      Env.OPENROUTER_API_KEY = 'test-key';
+
+      const result = await analyzeMessageWithAI('Não me chamo Gabriel', 'Gabriel');
+
+      expect(result.detectedName).toBeUndefined();
+    });
+
+    it('clears false positive detectedOptIn when text is "e sim [Nome]"', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                intent: 'WRONG_NUMBER',
+                detectedName: 'Wanderson',
+                detectedOptIn: true,
+                isDifferentPerson: true,
+              }),
+            },
+          }],
+        })),
+      }));
+
+      const { Env } = await import('@/libs/Env');
+      Env.OPENROUTER_API_KEY = 'test-key';
+
+      const result = await analyzeMessageWithAI('Nao me chamo Gabriel, e sim Wanderson', 'Gabriel');
+
+      expect(result.detectedOptIn).toBeNull();
+      expect(result.detectedName).toBe('Wanderson');
+    });
+
+    it('recovers corrected name via rule extraction if AI returned null detectedName', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                intent: 'WRONG_NUMBER',
+                detectedName: null,
+                detectedOptIn: null,
+                isDifferentPerson: true,
+              }),
+            },
+          }],
+        })),
+      }));
+
+      const { Env } = await import('@/libs/Env');
+      Env.OPENROUTER_API_KEY = 'test-key';
+
+      const result = await analyzeMessageWithAI('Nao me chamo Gabriel, e sim Wanderson', 'Gabriel');
+
+      expect(result.detectedName).toBe('Wanderson');
+    });
+
+    it('discards hallucinated detectedName if AI returns Amém or religious phrase', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                intent: 'OUTDATED_DATA',
+                detectedName: 'Amém',
+                detectedOptIn: null,
+                isDifferentPerson: false,
+              }),
+            },
+          }],
+        })),
+      }));
+
+      const { Env } = await import('@/libs/Env');
+      Env.OPENROUTER_API_KEY = 'test-key';
+
+      const result = await analyzeMessageWithAI('Amém', 'Danilo');
+
+      expect(result.detectedName).toBeUndefined();
+    });
+  });
+});
