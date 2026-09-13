@@ -15,7 +15,7 @@ describe('MemberDomain - getKidsClass', () => {
   it('deve retornar BERCARIO para idade <= 2 anos', () => {
     const birth = new Date('2024-03-10');
 
-    expect(MemberDomain.getKidsClass(birth)).toBe('BERCARIO');
+    expect(MemberDomain.getKidsClass(birth)).toBe('BERCÁRIO');
   });
 
   it('deve retornar MATERNAL para idade de 3 a 5 anos', () => {
@@ -39,8 +39,8 @@ describe('MemberDomain - getKidsClass', () => {
 
 describe('MemberDomain - canTransitionTo', () => {
   it('deve permitir avançar um passo na jornada', () => {
-    expect(MemberDomain.canTransitionTo('DECISION', 'CONSOLIDATION')).toBe(true);
-    expect(MemberDomain.canTransitionTo('ENCOUNTER', 'POST_ENCOUNTER')).toBe(true);
+    expect(MemberDomain.canTransitionTo('DECISION', 'CELL')).toBe(true);
+    expect(MemberDomain.canTransitionTo('ENCOUNTER', 'LEADERSHIP_TRAINING')).toBe(true);
   });
 
   it('deve impedir pular passos', () => {

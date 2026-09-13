@@ -1,17 +1,17 @@
-import 'dotenv/config';
-import fs from 'fs';
+import fs from 'node:fs';
 import { parse } from 'csv-parse/sync';
+import { and, eq, ilike } from 'drizzle-orm';
 import { db } from '../libs/DB';
-import { members } from '../models/Schema';
-import { eq, and, or, ilike } from 'drizzle-orm';
 import { WhatsAppService } from '../libs/services/WhatsAppService';
+import { members } from '../models/Schema';
+import 'dotenv/config';
 
 /**
  * SCRIPT: Importação de Candidatos ao Batismo 2026
- * 
+ *
  * Este script processa uma planilha CSV com:
  * Nome Completo | Telefone / Whatsapp | Geração
- * 
+ *
  * Funcionalidades:
  * 1. Importa membros com a tag "BATISMO_2026".
  * 2. Identifica a Geração (F1, F10, etc).
@@ -21,17 +21,17 @@ import { WhatsAppService } from '../libs/services/WhatsAppService';
 
 // CONFIGURAÇÕES
 const SEND_WHATSAPP = false; // Mude para true para disparar mensagens
-const ORG_ID = "org_3AnSpFjJduHOXVTu191GR8W9Iu2"; // ID da Organização (TelePaz)
-const BAPTISM_TAG = "BATISMO_2026";
+const ORG_ID = 'org_3AnSpFjJduHOXVTu191GR8W9Iu2'; // ID da Organização (TelePaz)
+const BAPTISM_TAG = 'BATISMO_2026';
 const DEFAULT_BIRTH_DATE = new Date('1900-01-01');
-const WHATSAPP_MESSAGE_TEMPLATE = (name: string) => 
+const WHATSAPP_MESSAGE_TEMPLATE = (name: string) =>
   `Olá ${name}! Estamos muito felizes com sua decisão. Este é um convite especial para o Batismo 2026. Em breve entraremos em contato com mais detalhes! 🙌`;
 
 async function guessGender(name: string): Promise<'M' | 'F'> {
   const firstName = name.split(' ')[0].toLowerCase();
   const femaleEndings = ['a', 'ia', 'is', 'th', 'ice', 'riz'];
   const femaleNames = ['beatriz', 'alice', 'iris', 'ruth', 'ester', 'marta', 'noemi', 'raquel'];
-  
+
   if (femaleNames.includes(firstName) || femaleEndings.some(e => firstName.endsWith(e))) {
     return 'F';
   }
@@ -45,7 +45,9 @@ function sanitizePhone(phone: string): string {
 async function findLeaderId(genString: string, orgId: string): Promise<string | null> {
   // Ex: "F1 - Wilson e Cleide" -> ["Wilson", "Cleide"]
   const parts = genString.split('-')[1]?.trim().split(/ e | e\/| & /i) || [];
-  if (parts.length === 0) return null;
+  if (parts.length === 0) {
+    return null;
+  }
 
   for (const name of parts) {
     const leaderName = name.trim().split(' ')[0];
@@ -55,11 +57,13 @@ async function findLeaderId(genString: string, orgId: string): Promise<string | 
       .where(and(
         eq(members.organizationId, orgId),
         ilike(members.firstName, leaderName),
-        eq(members.isLeader, true)
+        eq(members.isLeader, true),
       ))
       .limit(1);
-    
-    if (found) return found.id;
+
+    if (found) {
+      return found.id;
+    }
   }
   return null;
 }
@@ -75,7 +79,7 @@ Ana Caroline Silva Oliveira,86994802983,F10 - Aurifran e Ana
 Antonia Clara da Silva minha mãe,86994440768,F7 - Italo e Arlania
 Antônia Marília da Costa Calaça,8699450-9165,F4 - Célia
 Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
-    
+
     fs.writeFileSync(filePath, exampleContent);
     console.log(`📝 Criado arquivo de exemplo: ${filePath}`);
   }
@@ -84,11 +88,11 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
 
   const fileContent = fs.readFileSync(filePath, 'utf-8');
 
-  interface BaptismRecord {
+  type BaptismRecord = {
     'Nome Completo': string;
     'Telefone / Whatsapp': string;
     'Geração': string;
-  }
+  };
 
   const records = parse(fileContent, {
     columns: true,
@@ -103,7 +107,9 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
       const rawPhone = record['Telefone / Whatsapp'];
       const rawGen = record['Geração'];
 
-      if (!fullName) continue;
+      if (!fullName) {
+        continue;
+      }
 
       const nameParts = fullName.trim().split(' ');
       const firstName = nameParts[0];
@@ -113,8 +119,8 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
 
       // Extrair slot de geração (F1 -> 1)
       const genMatch = rawGen.match(/F(\d+)/i);
-      const generationSlot = genMatch ? parseInt(genMatch[1], 10) : null;
-      
+      const generationSlot = genMatch ? Number.parseInt(genMatch[1], 10) : null;
+
       const leaderId = await findLeaderId(rawGen, ORG_ID);
 
       // Verificar duplicado
@@ -124,20 +130,17 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
         .where(and(
           eq(members.organizationId, ORG_ID),
           eq(members.firstName, firstName),
-          eq(members.lastName, lastName)
+          eq(members.lastName, lastName),
         ))
         .limit(1);
-
-      let memberId: string;
 
       if (existing) {
         console.log(`- Atualizando tag para: ${firstName} ${lastName}`);
         await db.update(members)
           .set({ kidsNotes: BAPTISM_TAG })
           .where(eq(members.id, existing.id));
-        memberId = existing.id;
       } else {
-        const [inserted] = await db.insert(members).values({
+        await db.insert(members).values({
           organizationId: ORG_ID,
           firstName,
           lastName,
@@ -150,9 +153,8 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
           currentStep: 'DECISION',
           isBaptized: false,
           lineage: rawGen,
-        }).returning({ id: members.id });
-        
-        memberId = inserted.id;
+        });
+
         console.log(`✅ Importado: ${firstName} ${lastName}`);
       }
 
@@ -160,9 +162,9 @@ Antonio Jose da Silva,86994440768,F7 - Italo e Arlania`;
       if (SEND_WHATSAPP && phone) {
         console.log(`   [WA] Enviando para ${phone}...`);
         await WhatsAppService.sendMessage({
-          phone, 
-          message: WHATSAPP_MESSAGE_TEMPLATE(firstName), 
-          organizationId: ORG_ID
+          phone,
+          message: WHATSAPP_MESSAGE_TEMPLATE(firstName),
+          organizationId: ORG_ID,
         });
       }
 

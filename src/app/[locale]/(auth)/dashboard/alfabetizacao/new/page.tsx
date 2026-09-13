@@ -1,8 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
+import { ArrowLeft } from 'lucide-react';
 import { setRequestLocale } from 'next-intl/server';
 import { LiteracyRegistrationForm } from '@/components/Literacy/LiteracyRegistrationForm';
 import { Link } from '@/libs/I18nNavigation';
-import { ArrowLeft } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ export default async function NewLiteracyStudentPage(props: {
       <div className="mx-auto max-w-3xl">
         <Link
           href="/dashboard/alfabetizacao"
-          className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500 hover:text-blue-600 transition-colors mb-4"
+          className="mb-4 inline-flex items-center gap-2 text-xs font-black tracking-wider text-slate-500 uppercase transition-colors hover:text-blue-600"
         >
           <ArrowLeft size={16} />
           Voltar para Lista de Alfabetização

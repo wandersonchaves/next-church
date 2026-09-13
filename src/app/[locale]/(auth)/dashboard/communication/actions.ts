@@ -1,12 +1,13 @@
 'use server';
 
 import { auth } from '@clerk/nextjs/server';
+import { and, count, eq, ilike, isNull } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { inngest } from '@/libs/Inngest';
-import { EvolutionGoClient } from '@/libs/evolution-go/client';
 import { db } from '@/libs/DB';
-import { members, literacyStudents } from '@/models/Schema';
-import { eq, and, isNull, count } from 'drizzle-orm';
+import { EvolutionGoClient } from '@/libs/evolution-go/client';
+import { inngest } from '@/libs/Inngest';
+import { literacyStudents, members } from '@/models/Schema';
 
 const BroadcastSchema = z.object({
   message: z.string().min(5, 'A mensagem deve ter pelo menos 5 caracteres'),
@@ -22,7 +23,9 @@ const BroadcastSchema = z.object({
 
 export async function getRecipientCountAction(filters: z.infer<typeof BroadcastSchema>['filters']) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado' };
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
 
   try {
     if (filters.targetAudience === 'LITERACY') {
@@ -48,7 +51,7 @@ export async function getRecipientCountAction(filters: z.infer<typeof BroadcastS
 
     const conditions = [
       eq(members.organizationId, orgId),
-      isNull(members.deletedAt)
+      isNull(members.deletedAt),
     ];
 
     if (filters.currentStep) {
@@ -109,7 +112,9 @@ export async function sendBroadcastAction(data: z.infer<typeof BroadcastSchema>)
  */
 export async function syncWebhookAction() {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado' };
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
 
   try {
     const client = EvolutionGoClient.getInstance();
@@ -126,7 +131,7 @@ export async function syncWebhookAction() {
     const identifier = process.env.EVOLUTION_INSTANCE || 'test-dsv-02';
 
     await NotificationService.logConnectionState(identifier, 'CONNECTED_AND_SYNCED_MANUAL', orgId);
-    console.info(`[SYNC_WEBHOOK_INTERNAL] Mapping created: Instance ${identifier} -> Org ${orgId}`);
+    console.warn(`[SYNC_WEBHOOK_INTERNAL] Mapping created: Instance ${identifier} -> Org ${orgId}`);
 
     if (result.success) {
       return { success: true };
@@ -134,7 +139,7 @@ export async function syncWebhookAction() {
       // Se deu 404 mas o vínculo interno foi criado, retornamos sucesso com aviso
       return {
         success: true,
-        message: 'Vínculo interno atualizado. As mensagens devem aparecer agora.'
+        message: 'Vínculo interno atualizado. As mensagens devem aparecer agora.',
       };
     }
   } catch (error) {
@@ -144,14 +149,14 @@ export async function syncWebhookAction() {
 }
 
 /**
-* Busca o status da instância do WhatsApp
-*/
+ * Busca o status da instância do WhatsApp
+ */
 export async function getWhatsAppStatusAction() {
   try {
     const client = EvolutionGoClient.getInstance();
     const status = await client.getInstanceStatus();
     return { success: true, status };
-  } catch (error) {
+  } catch {
     return { success: false, error: 'Falha ao buscar status' };
   }
 }
@@ -161,23 +166,23 @@ export async function getQRCodeAction() {
     const client = EvolutionGoClient.getInstance();
     const res = await client.getQRCode();
     return res;
-  } catch (error) {
+  } catch {
     return { error: 'Falha ao gerar QR Code' };
   }
 }
 
 export async function connectInstanceAction(phone?: string) {
-  console.log(`🔌 [CONNECT_ACTION] Iniciando conexão para instância...`);
+  console.warn(`🔌 [CONNECT_ACTION] Iniciando conexão para instância...`);
   try {
     const client = EvolutionGoClient.getInstance();
-    
+
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://next-church.up.railway.app';
     const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/webhooks/evolution`;
 
-    console.log(`🔌 [CONNECT_ACTION] Webhook URL: ${webhookUrl}`);
+    console.warn(`🔌 [CONNECT_ACTION] Webhook URL: ${webhookUrl}`);
     const res = await client.connectInstance(phone, webhookUrl);
-    
-    console.log(`🔌 [CONNECT_ACTION] Resultado:`, JSON.stringify(res));
+
+    console.warn(`🔌 [CONNECT_ACTION] Resultado:`, JSON.stringify(res));
     return res;
   } catch (error) {
     console.error(`🔌 [CONNECT_ACTION_ERROR]`, error);
@@ -190,7 +195,7 @@ export async function pairInstanceAction(phone: string) {
     const client = EvolutionGoClient.getInstance();
     const res = await client.pairInstance(phone);
     return res;
-  } catch (error) {
+  } catch {
     return { error: 'Falha ao solicitar código de pareamento' };
   }
 }
@@ -200,7 +205,9 @@ export async function pairInstanceAction(phone: string) {
  */
 export async function testEvolutionHealthAction() {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado' };
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
 
   try {
     const client = EvolutionGoClient.getInstance();
@@ -218,10 +225,16 @@ export async function testEvolutionHealthAction() {
 
 /**
  * Sends a single test WhatsApp message with full diagnostic output.
+ * @param params - Objeto de parâmetros para envio de teste.
+ * @param params.phone - Número de telefone de destino com DDD.
+ * @param params.message - Conteúdo opcional da mensagem de teste.
+ * @returns Resultado detalhado do envio do WhatsApp.
  */
 export async function testWhatsAppMessageAction(params: { phone: string; message?: string }) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Não autorizado' };
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
 
   try {
     const client = EvolutionGoClient.getInstance();
@@ -241,3 +254,140 @@ export async function testWhatsAppMessageAction(params: { phone: string; message
   }
 }
 
+/**
+ * Fetches all registered test members for WhatsApp messaging (kidsNotes = TESTE_PRD).
+ * @returns Array of test members or error.
+ */
+export async function getTestMembersAction() {
+  const { orgId } = await auth();
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
+
+  try {
+    const testMembers = await db
+      .select({
+        id: members.id,
+        firstName: members.firstName,
+        lastName: members.lastName,
+        phone: members.phone,
+        kidsNotes: members.kidsNotes,
+        currentStep: members.currentStep,
+        createdAt: members.createdAt,
+      })
+      .from(members)
+      .where(and(
+        eq(members.organizationId, orgId),
+        eq(members.kidsNotes, 'TESTE_PRD'),
+        isNull(members.deletedAt),
+      ))
+      .orderBy(members.firstName);
+
+    return { success: true, data: testMembers };
+  } catch (e) {
+    console.error('[GET_TEST_MEMBERS_ERROR]', e);
+    return { error: 'Falha ao buscar membros de teste.' };
+  }
+}
+
+/**
+ * Registers or tags a member for testing WhatsApp delivery in PRD (kidsNotes = TESTE_PRD).
+ * @param data - Dados cadastrais do membro para teste.
+ * @param data.firstName - Primeiro nome do membro de teste.
+ * @param data.lastName - Sobrenome opcional do membro de teste.
+ * @param data.phone - Número de telefone com DDD.
+ * @returns Object indicating success or error.
+ */
+export async function registerTestMemberAction(data: {
+  firstName: string;
+  lastName?: string;
+  phone: string;
+}) {
+  const { orgId } = await auth();
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
+
+  const cleanPhone = data.phone.replace(/\D/g, '');
+  if (!cleanPhone || cleanPhone.length < 10) {
+    return { error: 'Telefone inválido para teste. Informe DDD + número (ex: 86995206925).' };
+  }
+
+  const firstName = data.firstName.trim() || 'Wanderson';
+  const lastName = (data.lastName || 'Chaves (Teste PRD)').trim();
+
+  try {
+    const suffix8 = cleanPhone.slice(-8);
+    const [existing] = await db
+      .select()
+      .from(members)
+      .where(and(
+        eq(members.organizationId, orgId),
+        ilike(members.phone, `%${suffix8}`),
+        isNull(members.deletedAt),
+      ))
+      .limit(1);
+
+    if (existing) {
+      await db.update(members)
+        .set({
+          kidsNotes: 'TESTE_PRD',
+          phone: cleanPhone,
+          updatedAt: new Date(),
+        })
+        .where(eq(members.id, existing.id));
+
+      revalidatePath('/[locale]/dashboard/communication', 'page');
+      return { success: true, updated: true, memberId: existing.id };
+    }
+
+    const [created] = await db.insert(members).values({
+      organizationId: orgId,
+      firstName,
+      lastName,
+      phone: cleanPhone,
+      gender: 'M',
+      birthDate: new Date('1990-01-01'),
+      kidsNotes: 'TESTE_PRD',
+      currentStep: 'DECISION',
+      isBaptized: false,
+      status: 'ACTIVE',
+    }).returning({ id: members.id });
+
+    revalidatePath('/[locale]/dashboard/communication', 'page');
+    return { success: true, created: true, memberId: created?.id };
+  } catch (e) {
+    console.error('[REGISTER_TEST_MEMBER_ERROR]', e);
+    return { error: 'Falha ao registrar membro de teste.' };
+  }
+}
+
+/**
+ * Removes the test tag (TESTE_PRD) from a member.
+ * @param memberId - Target member UUID.
+ * @returns Object indicating success or error.
+ */
+export async function removeTestMemberTagAction(memberId: string) {
+  const { orgId } = await auth();
+  if (!orgId) {
+    return { error: 'Não autorizado' };
+  }
+
+  try {
+    await db.update(members)
+      .set({
+        kidsNotes: null,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(members.id, memberId),
+        eq(members.organizationId, orgId),
+      ));
+
+    revalidatePath('/[locale]/dashboard/communication', 'page');
+    return { success: true };
+  } catch (e) {
+    console.error('[REMOVE_TEST_MEMBER_ERROR]', e);
+    return { error: 'Falha ao remover tag de teste.' };
+  }
+}

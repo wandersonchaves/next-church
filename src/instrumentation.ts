@@ -41,14 +41,14 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.NODE_ENV === 'production') {
     try {
       const { inngest } = await import('@/libs/Inngest');
-      await inngest.send({ 
-        name: 'system/connection.check', 
-        data: { 
+      await inngest.send({
+        name: 'system/connection.check',
+        data: {
           reason: 'deployment_boot',
-          timestamp: new Date().toISOString()
-        } 
+          timestamp: new Date().toISOString(),
+        },
       });
-      console.log('🚀 [BOOT] Verificação de conexão WhatsApp disparada com sucesso.');
+      console.warn('🚀 [BOOT] Verificação de conexão WhatsApp disparada com sucesso.');
     } catch (error) {
       console.error('❌ [BOOT_ERROR] Falha ao disparar verificação de conexão:', error);
     }

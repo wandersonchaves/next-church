@@ -1,8 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
-import { db } from '@/libs/DB';
-import { ministries, members } from '@/models/Schema';
 import { eq, sql } from 'drizzle-orm';
 import { setRequestLocale } from 'next-intl/server';
+import { db } from '@/libs/DB';
+import { members, ministries } from '@/models/Schema';
 import MinistriesClient from './MinistriesClient';
 
 export default async function MinistriesPage(props: { params: Promise<{ locale: string }> }) {
@@ -10,7 +10,9 @@ export default async function MinistriesPage(props: { params: Promise<{ locale: 
   const { orgId } = await auth();
   setRequestLocale(locale);
 
-  if (!orgId) return null;
+  if (!orgId) {
+    return null;
+  }
 
   // 1. Busca Ministérios com IDs de líderes para possibilitar a edição
   const initialMinistries = await db

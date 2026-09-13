@@ -1,20 +1,24 @@
 'use server';
 
+import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
+import { inngest } from '@/libs/Inngest';
+import { logActivity } from '@/libs/services/AuditService';
 import { members } from '@/models/Schema';
 import { MemberSchema } from '@/validations/MemberValidation';
-import { logActivity } from '@/libs/services/AuditService';
-import { inngest } from '@/libs/Inngest';
-import { eq } from 'drizzle-orm';
 
 /**
  * Ação pública para cadastro de membros via link externo.
  * Não utiliza auth() do Clerk, pois o acesso é público.
  * O organizationId é passado via parâmetro seguro.
+ * @param orgId - Identificador único da organização onde o membro será cadastrado.
+ * @param data - Dados do novo membro a ser registrado.
  */
 export async function createPublicMemberAction(orgId: string, data: any) {
   const validated = MemberSchema.safeParse(data);
-  if (!validated.success) return { error: 'Dados inválidos ou incompletos.' };
+  if (!validated.success) {
+    return { error: 'Dados inválidos ou incompletos.' };
+  }
 
   try {
     const createdMember = await db.transaction(async (tx) => {
@@ -39,7 +43,7 @@ export async function createPublicMemberAction(orgId: string, data: any) {
         birthDate: new Date(validated.data.birthDate),
         gender: validated.data.gender,
         leaderId: leaderId || null,
-        lineage: lineage,
+        lineage,
         generationSlot: validated.data.generationSlot ? Number(validated.data.generationSlot) : null,
         isBaptized: validated.data.isBaptized || false,
         currentStep: 'DECISION',
@@ -50,11 +54,11 @@ export async function createPublicMemberAction(orgId: string, data: any) {
 
     if (createdMember) {
       // Log de atividade e gatilho de boas-vindas
-      await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName} (Link Público)`).catch(() => {});
+      await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName} (Link Público)`).catch(() => { });
       await inngest.send({
         name: 'member/created',
-        data: { memberId: createdMember.id, organizationId: orgId }
-      }).catch(() => {});
+        data: { memberId: createdMember.id, organizationId: orgId },
+      }).catch(() => { });
     }
 
     return { success: true };

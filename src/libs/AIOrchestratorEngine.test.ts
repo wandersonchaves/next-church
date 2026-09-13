@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Env } from '@/libs/Env';
 import { analyzeMessageWithAI } from './AIOrchestratorEngine';
 
 vi.mock('@/libs/Env', () => ({
@@ -269,8 +270,7 @@ describe('AIOrchestratorEngine', () => {
         })),
       }));
 
-      const { Env } = await import('@/libs/Env');
-      Env.OPENROUTER_API_KEY = 'test-key';
+      Object.assign(Env, { OPENROUTER_API_KEY: 'test-key' });
 
       const result = await analyzeMessageWithAI('Não me chamo Gabriel', 'Gabriel');
 
@@ -294,8 +294,7 @@ describe('AIOrchestratorEngine', () => {
         })),
       }));
 
-      const { Env } = await import('@/libs/Env');
-      Env.OPENROUTER_API_KEY = 'test-key';
+      Object.assign(Env, { OPENROUTER_API_KEY: 'test-key' });
 
       const result = await analyzeMessageWithAI('Nao me chamo Gabriel, e sim Wanderson', 'Gabriel');
 
@@ -320,8 +319,7 @@ describe('AIOrchestratorEngine', () => {
         })),
       }));
 
-      const { Env } = await import('@/libs/Env');
-      Env.OPENROUTER_API_KEY = 'test-key';
+      Object.assign(Env, { OPENROUTER_API_KEY: 'test-key' });
 
       const result = await analyzeMessageWithAI('Nao me chamo Gabriel, e sim Wanderson', 'Gabriel');
 
@@ -345,8 +343,7 @@ describe('AIOrchestratorEngine', () => {
         })),
       }));
 
-      const { Env } = await import('@/libs/Env');
-      Env.OPENROUTER_API_KEY = 'test-key';
+      Object.assign(Env, { OPENROUTER_API_KEY: 'test-key' });
 
       const result = await analyzeMessageWithAI('Amém', 'Danilo');
 

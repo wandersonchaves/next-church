@@ -44,7 +44,7 @@ export const LiteracyReportPageClient = (props: {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      logLiteracyExportAuditAction(props.selectedStatus, props.students.length).catch(() => {});
+      logLiteracyExportAuditAction(props.selectedStatus, props.students.length).catch(() => { });
     } catch (error) {
       console.error('Erro ao baixar planilha CSV:', error);
     } finally {

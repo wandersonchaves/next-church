@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       'EXPORT',
       'LITERACY',
       `Exportação de ${students.length} alunos (${statusParam}) para órgão responsável (${orgName})`,
-    ).catch(() => {});
+    ).catch(() => { });
 
     const dateStr = new Date().toISOString().slice(0, 10);
     const safeStatus = statusParam.toLowerCase().replace(/[^a-z0-9]/g, '_');

@@ -10,7 +10,7 @@ import { type LiteracyStudentInput, LiteracyStudentSchema } from '@/validations/
 
 /**
  * Cadastra um novo aluno na lista de Alfabetização dentro do dashboard.
- * @param data
+ * @param data - Dados cadastrais do aluno de alfabetização.
  */
 export async function createLiteracyStudentAction(data: LiteracyStudentInput) {
   const { orgId } = await auth();
@@ -60,10 +60,10 @@ export async function createLiteracyStudentAction(data: LiteracyStudentInput) {
 
 /**
  * Busca a lista de alunos da Alfabetização da organização com filtros opcionais.
- * @param filters
- * @param filters.query
- * @param filters.shift
- * @param filters.status
+ * @param filters - Filtros de busca opcionais.
+ * @param filters.query - Termo de busca por nome, telefone ou responsável.
+ * @param filters.shift - Turno preferencial do aluno.
+ * @param filters.status - Status atual da inscrição do aluno.
  */
 export async function getLiteracyStudentsAction(filters?: {
   query?: string;
@@ -164,8 +164,8 @@ export async function getLiteracyMetricsAction() {
 
 /**
  * Atualiza os dados de um aluno da Alfabetização.
- * @param id
- * @param data
+ * @param id - Identificador único do aluno.
+ * @param data - Dados parciais a serem atualizados.
  */
 export async function updateLiteracyStudentAction(id: string, data: Partial<LiteracyStudentInput>) {
   const { orgId } = await auth();
@@ -202,9 +202,9 @@ export async function updateLiteracyStudentAction(id: string, data: Partial<Lite
 
 /**
  * Atualiza rapidamente a turma atribuída e status do aluno.
- * @param id
- * @param assignedClass
- * @param status
+ * @param id - Identificador único do aluno.
+ * @param assignedClass - Nome ou código da turma atribuída.
+ * @param status - Novo status opcional da matrícula.
  */
 export async function assignLiteracyClassAction(id: string, assignedClass: string, status?: 'INSCRITO' | 'CONFIRMADO' | 'TURMA_FORMADA' | 'DESISTENTE') {
   const { orgId } = await auth();
@@ -236,7 +236,7 @@ export async function assignLiteracyClassAction(id: string, assignedClass: strin
 
 /**
  * Remove um registro de aluno da Alfabetização.
- * @param id
+ * @param id - Identificador único do aluno a ser removido.
  */
 export async function deleteLiteracyStudentAction(id: string) {
   const { orgId } = await auth();

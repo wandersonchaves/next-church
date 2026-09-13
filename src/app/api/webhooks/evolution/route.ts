@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Evolution GO / Evolution API Webhook Handler
  * Optimized for performance: Validates, saves directly, and hands off to Inngest for AI processing.
- * @param req
+ * @param req - Objeto da requisição HTTP recebida da Evolution API.
  */
 export async function POST(req: Request) {
   try {

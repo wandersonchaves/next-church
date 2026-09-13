@@ -1,14 +1,15 @@
 'use server';
 
 import { auth } from '@clerk/nextjs/server';
-import { db } from '@/libs/DB';
-import { literacyStudents, ministries } from '@/models/Schema';
-import { LiteracyStudentSchema, type LiteracyStudentInput } from '@/validations/LiteracyValidation';
-import { logActivity } from '@/libs/services/AuditService';
 import { revalidatePath } from 'next/cache';
+import { db } from '@/libs/DB';
+import { logActivity } from '@/libs/services/AuditService';
+import { literacyStudents, ministries } from '@/models/Schema';
+import { type LiteracyStudentInput, LiteracyStudentSchema } from '@/validations/LiteracyValidation';
 
 /**
  * Cadastra um novo aluno de Alfabetização a partir da tela pública / voluntário na comunidade.
+ * @param data - Dados do aluno de alfabetização a ser cadastrado.
  */
 export async function createPublicLiteracyRegistrationAction(data: LiteracyStudentInput & { orgId?: string }) {
   const validated = LiteracyStudentSchema.safeParse(data);
@@ -58,7 +59,7 @@ export async function createPublicLiteracyRegistrationAction(data: LiteracyStude
       })
       .returning();
 
-    await logActivity('CREATE', 'LITERACY', `${student?.studentName} (Inscrição na Comunidade)`).catch(() => {});
+    await logActivity('CREATE', 'LITERACY', `${student?.studentName} (Inscrição na Comunidade)`).catch(() => { });
 
     revalidatePath('/dashboard/alfabetizacao');
     return { success: true, id: student?.id };

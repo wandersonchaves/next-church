@@ -535,7 +535,7 @@ export const LiteracyDashboardClient = (props: {
 
       <LiteracyExportModal
         isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
+        onCloseAction={() => setShowExportModal(false)}
         students={students}
         organizationName={props.organizationName || 'NextChurch'}
       />

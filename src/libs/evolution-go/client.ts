@@ -1,12 +1,12 @@
 import { Env } from '@/libs/Env';
 import { NotificationService } from '@/libs/services/NotificationService';
 
-export interface EvolutionGoInstance {
+export type EvolutionGoInstance = {
   instanceName: string;
   status: string;
-}
+};
 
-export interface SendMessageResult {
+export type SendMessageResult = {
   sent: boolean;
   externalId?: string;
   data?: any;
@@ -15,9 +15,9 @@ export interface SendMessageResult {
   status?: number;
   endpoint?: string;
   latencyMs?: number;
-}
+};
 
-export interface InstanceStatusResult {
+export type InstanceStatusResult = {
   connected: boolean;
   loggedIn?: boolean;
   name?: string;
@@ -25,7 +25,7 @@ export interface InstanceStatusResult {
   disconnectReason?: string;
   error?: string;
   latencyMs?: number;
-}
+};
 
 export class EvolutionGoClient {
   private static instance: EvolutionGoClient;
@@ -48,19 +48,27 @@ export class EvolutionGoClient {
 
   /**
    * Helper to mask API keys for safe logging.
+   * @param secret - Chave ou segredo a ser mascarado para log seguro.
+   * @returns Chave mascarada para exibição segura.
    */
   private maskSecret(secret: string): string {
-    if (!secret || secret.length <= 6) return '***';
+    if (!secret || secret.length <= 6) {
+      return '***';
+    }
     return `${secret.slice(0, 4)}...${secret.slice(-3)}`;
   }
 
   /**
    * Resolves phone number candidates for Brazilian WhatsApp accounts.
    * In Brazil (DDI 55), DDDs outside SP (DDD > 19) use 12-digit JIDs on WhatsApp.
+   * @param phone - Número de telefone bruto para resolução de variações.
+   * @returns Lista de candidatos de números normalizados.
    */
   private getPhoneCandidates(phone: string): string[] {
     let clean = phone.replace(/\D/g, '');
-    if (!clean) return [];
+    if (!clean) {
+      return [];
+    }
 
     if (clean.length >= 10 && !clean.startsWith('55')) {
       clean = `55${clean}`;
@@ -70,7 +78,7 @@ export class EvolutionGoClient {
 
     if (clean.startsWith('55')) {
       if (clean.length === 13 && clean[4] === '9') {
-        const ddd = parseInt(clean.slice(2, 4), 10);
+        const ddd = Number.parseInt(clean.slice(2, 4), 10);
         if (ddd > 19) {
           // For DDDs outside SP (e.g. 86 Piauí), 12-digit JID without 9th digit is primary
           const without9 = `55${clean.slice(2, 4)}${clean.slice(5)}`;
@@ -98,18 +106,19 @@ export class EvolutionGoClient {
   /**
    * Sends a text message via Evolution GO v2.
    * Uses candidate resolution and clean JSON payload for instant socket delivery.
-   *
    * @param to - Destination phone number
    * @param text - Text message content
    * @param organizationId - Optional organization ID for automatic logging
    * @param overrides - Optional instance and API key overrides
+   * @param overrides.instanceName - Nome da instância customizada para envio.
+   * @param overrides.apiKey - Chave de API customizada para autenticação.
    * @returns SendMessageResult
    */
   public async sendMessage(
     to: string,
     text: string,
     organizationId?: string,
-    overrides?: { instanceName?: string; apiKey?: string }
+    overrides?: { instanceName?: string; apiKey?: string },
   ): Promise<SendMessageResult> {
     const apiKey = overrides?.apiKey || this.apiKey;
     const instanceName = overrides?.instanceName || this.instanceName;
@@ -127,14 +136,14 @@ export class EvolutionGoClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      apikey: apiKey,
+      'apikey': apiKey,
     };
 
     if (instanceName) {
       headers.instance = instanceName;
     }
 
-    console.info(`[EVOLUTION] [SEND_START] Recipient: ${to} (Candidates: ${phoneCandidates.join(', ')}) | Instance: ${instanceName || 'default'} | Server: ${this.baseUrl} | Key: ${this.maskSecret(apiKey)}`);
+    console.warn(`[EVOLUTION] [SEND_START] Recipient: ${to} (Candidates: ${phoneCandidates.join(', ')}) | Instance: ${instanceName || 'default'} | Server: ${this.baseUrl} | Key: ${this.maskSecret(apiKey)}`);
 
     let lastError = '';
     let lastStatus = 0;
@@ -148,7 +157,7 @@ export class EvolutionGoClient {
       for (const url of endpoints) {
         const startTime = Date.now();
         try {
-          console.info(`[EVOLUTION] [SEND_ATTEMPT] POST ${url} -> ${num}`);
+          console.warn(`[EVOLUTION] [SEND_ATTEMPT] POST ${url} -> ${num}`);
           const response = await fetch(url, {
             method: 'POST',
             headers,
@@ -170,7 +179,7 @@ export class EvolutionGoClient {
 
             const externalId = data.Info?.ID || data.data?.id || data.key?.id || data.id || data.messageId || data.Info?.id;
 
-            console.info(`[EVOLUTION] [SEND_SUCCESS] POST ${url} [HTTP ${response.status}] in ${elapsed}ms | Number: ${num} | Msg ID: ${externalId || 'N/A'}`);
+            console.warn(`[EVOLUTION] [SEND_SUCCESS] POST ${url} [HTTP ${response.status}] in ${elapsed}ms | Number: ${num} | Msg ID: ${externalId || 'N/A'}`);
 
             if (organizationId) {
               NotificationService.saveOutgoingMessage({
@@ -193,7 +202,7 @@ export class EvolutionGoClient {
           }
 
           // Se for erro de dispositivo não encontrado no WhatsApp (whatsmeow JID)
-          if (rawResponseText.includes("device JID") || rawResponseText.includes("doesn't contain a device")) {
+          if (rawResponseText.includes('device JID') || rawResponseText.includes('doesn\'t contain a device')) {
             lastError = `Número ${num} não possui conta ou dispositivo ativo no WhatsApp (device JID not found)`;
             console.warn(`[EVOLUTION] [SEND_WARN] POST ${url} [HTTP ${response.status}] in ${elapsed}ms -> Number: ${num} -> WhatsApp account not found on device store.`);
             break; // Pula para o próximo candidate sem tentar rotas inexistentes
@@ -232,7 +241,9 @@ export class EvolutionGoClient {
    * Fetches all instances to monitor status.
    */
   public async fetchInstances(): Promise<EvolutionGoInstance[]> {
-    if (!this.apiKey) return [];
+    if (!this.apiKey) {
+      return [];
+    }
     const url = `${this.baseUrl}/instance/fetchInstances`;
     const headers: Record<string, string> = { apikey: this.apiKey };
     if (this.instanceName) {
@@ -319,7 +330,7 @@ export class EvolutionGoClient {
 
         const name = rawData.Name || rawData.name || this.instanceName;
 
-        console.info(`[EVOLUTION] [STATUS_OK] Checked ${url} in ${elapsed}ms -> Connected: ${connected}, LoggedIn: ${loggedIn}, State: ${state || 'N/A'}, Name: ${name}`);
+        console.warn(`[EVOLUTION] [STATUS_OK] Checked ${url} in ${elapsed}ms -> Connected: ${connected}, LoggedIn: ${loggedIn}, State: ${state || 'N/A'}, Name: ${name}`);
 
         return {
           connected,
@@ -343,7 +354,9 @@ export class EvolutionGoClient {
    * Gets the QR Code for the current instance.
    */
   public async getQRCode(): Promise<{ success?: boolean; data?: string; error?: string }> {
-    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+    if (!this.apiKey || !this.instanceName) {
+      return { error: 'Config missing' };
+    }
 
     const endpoints = [
       `${this.baseUrl}/instance/qr`,
@@ -366,7 +379,9 @@ export class EvolutionGoClient {
           signal: AbortSignal.timeout(8000),
         });
 
-        if (!response.ok) continue;
+        if (!response.ok) {
+          continue;
+        }
 
         const result = await response.json();
         const qr = typeof result.data === 'string'
@@ -374,7 +389,7 @@ export class EvolutionGoClient {
           : (result.data?.qrcode || result.base64 || result.qrcode?.base64 || result.code || null);
 
         if (qr) {
-          console.info(`[EVOLUTION] [QR_SUCCESS] QR Code retrieved successfully from ${url}`);
+          console.warn(`[EVOLUTION] [QR_SUCCESS] QR Code retrieved successfully from ${url}`);
           return { success: true, data: qr };
         }
       } catch (error) {
@@ -387,9 +402,14 @@ export class EvolutionGoClient {
 
   /**
    * Connects to the instance.
+   * @param phone - Número de telefone opcional para iniciar conexão.
+   * @param webhookUrl - URL do webhook para inscrição nos eventos.
+   * @returns Resultado da tentativa de conexão com QR Code ou mensagem.
    */
   public async connectInstance(phone?: string, webhookUrl?: string) {
-    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+    if (!this.apiKey || !this.instanceName) {
+      return { error: 'Config missing' };
+    }
 
     const endpoints = [
       `${this.baseUrl}/instance/connect`,
@@ -405,14 +425,14 @@ export class EvolutionGoClient {
 
     for (const url of endpoints) {
       try {
-        console.info(`[EVOLUTION] [CONNECT_ATTEMPT] POST ${url}`);
+        console.warn(`[EVOLUTION] [CONNECT_ATTEMPT] POST ${url}`);
         const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            apikey: this.apiKey,
-            instance: this.instanceName,
-            instanceName: this.instanceName,
+            'apikey': this.apiKey,
+            'instance': this.instanceName,
+            'instanceName': this.instanceName,
           },
           body,
           signal: AbortSignal.timeout(12000),
@@ -423,7 +443,7 @@ export class EvolutionGoClient {
           ? result.data
           : (result.data?.qrcode || result.base64 || result.qrcode?.base64 || null);
 
-        console.info(`[EVOLUTION] [CONNECT_RESULT] ${url} [HTTP ${response.status}] -> HasQR: ${Boolean(qr)}`);
+        console.warn(`[EVOLUTION] [CONNECT_RESULT] ${url} [HTTP ${response.status}] -> HasQR: ${Boolean(qr)}`);
 
         return {
           success: response.ok,
@@ -440,9 +460,13 @@ export class EvolutionGoClient {
 
   /**
    * Requests a pairing code for the instance.
+   * @param phone - Número de telefone para solicitar o código de pareamento.
+   * @returns Código de pareamento numérico gerado.
    */
   public async pairInstance(phone: string) {
-    if (!this.apiKey || !this.instanceName) return { error: 'Config missing' };
+    if (!this.apiKey || !this.instanceName) {
+      return { error: 'Config missing' };
+    }
 
     const cleanPhone = phone.replace(/\D/g, '');
     const endpoints = [
@@ -458,14 +482,14 @@ export class EvolutionGoClient {
 
     for (const url of endpoints) {
       try {
-        console.info(`[EVOLUTION] [PAIR_ATTEMPT] POST ${url} for ${cleanPhone}`);
+        console.warn(`[EVOLUTION] [PAIR_ATTEMPT] POST ${url} for ${cleanPhone}`);
         const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            apikey: this.apiKey,
-            instance: this.instanceName,
-            instanceName: this.instanceName,
+            'apikey': this.apiKey,
+            'instance': this.instanceName,
+            'instanceName': this.instanceName,
           },
           body,
           signal: AbortSignal.timeout(12000),
@@ -478,7 +502,7 @@ export class EvolutionGoClient {
         }
 
         if (response.ok && code) {
-          console.info(`[EVOLUTION] [PAIR_SUCCESS] Pairing code generated: ${code}`);
+          console.warn(`[EVOLUTION] [PAIR_SUCCESS] Pairing code generated: ${code}`);
           return {
             success: true,
             code: String(code),
@@ -494,6 +518,8 @@ export class EvolutionGoClient {
 
   /**
    * Configures the webhook for the current instance.
+   * @param webhookUrl - URL pública do endpoint para recebimento de eventos.
+   * @returns Resultado da configuração do webhook.
    */
   public async setWebhook(webhookUrl: string) {
     if (!this.apiKey || !this.instanceName) {
@@ -525,21 +551,21 @@ export class EvolutionGoClient {
 
     for (const url of endpoints) {
       try {
-        console.info(`[EVOLUTION] [WEBHOOK_SYNC_ATTEMPT] POST ${url} -> URL: ${webhookUrl}`);
+        console.warn(`[EVOLUTION] [WEBHOOK_SYNC_ATTEMPT] POST ${url} -> URL: ${webhookUrl}`);
         const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            apikey: this.apiKey,
-            instance: this.instanceName,
-            instanceName: this.instanceName,
+            'apikey': this.apiKey,
+            'instance': this.instanceName,
+            'instanceName': this.instanceName,
           },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
 
         const rawText = await response.text();
-        console.info(`[EVOLUTION] [WEBHOOK_SYNC_RESULT] ${url} [HTTP ${response.status}] -> ${rawText}`);
+        console.warn(`[EVOLUTION] [WEBHOOK_SYNC_RESULT] ${url} [HTTP ${response.status}] -> ${rawText}`);
 
         if (response.ok) {
           return { success: true, data: rawText };
@@ -576,4 +602,3 @@ export class EvolutionGoClient {
     }
   }
 }
-

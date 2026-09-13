@@ -31,5 +31,5 @@
 
 ---
 
-Developed with passion by [Wanderson Chaves](https://github.com/wandersonchaves).  
+Developed with passion by [Wanderson Chaves](https://github.com/wandersonchaves).
 *Next Church standard of excellence, powered by NextChurch technology.*

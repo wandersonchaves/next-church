@@ -1,12 +1,12 @@
 import { auth } from '@clerk/nextjs/server';
+import { inArray } from 'drizzle-orm';
+import { ChevronRight, Clock, MessageSquare, Phone, Reply, User } from 'lucide-react';
 import { setRequestLocale } from 'next-intl/server';
-import { MessageSquare, User, Clock, Phone, ChevronRight, Reply } from 'lucide-react';
-import { NotificationService } from '@/libs/services/NotificationService';
 import Link from 'next/link';
 import { db } from '@/libs/DB';
-import { notificationLogs } from '@/models/Schema';
-import { inArray } from 'drizzle-orm';
 import { Env } from '@/libs/Env';
+import { NotificationService } from '@/libs/services/NotificationService';
+import { notificationLogs } from '@/models/Schema';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,16 +16,18 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
   const { orgId } = await auth();
   setRequestLocale(locale);
 
-  if (!orgId) return null;
+  if (!orgId) {
+    return null;
+  }
 
   const messages = await NotificationService.getIncomingMessages(orgId, Env.EVOLUTION_INSTANCE);
-  
+
   // Busca mensagens originais (quotes) para dar contexto
   const parentIds = messages
     .map(m => (m as any).parentExternalId)
     .filter((id): id is string => typeof id === 'string' && id.trim() !== '');
-    
-  const parentMessages = parentIds.length > 0 
+
+  const parentMessages = parentIds.length > 0
     ? await db.select().from(notificationLogs).where(inArray(notificationLogs.externalId, parentIds))
     : [];
 
@@ -85,12 +87,14 @@ export default async function InboxPage(props: { params: Promise<{ locale: strin
                   <div className="flex items-center gap-2 rounded-xl bg-slate-50/50 px-3 py-1.5 text-[10px] font-bold text-slate-400 italic">
                     <Reply size={10} className="rotate-180" />
                     <span className="truncate">
-                      Resposta a: {getParentContent(msg.parentExternalId) || `Mensagem [${msg.parentExternalId.slice(-6)}]`}
+                      Resposta a:
+                      {' '}
+                      {getParentContent(msg.parentExternalId) || `Mensagem [${msg.parentExternalId.slice(-6)}]`}
                     </span>
                   </div>
                 )}
                 <div className="rounded-2xl bg-slate-50 p-4 transition-colors group-hover:bg-indigo-50/50">
-                  <p className="text-sm font-medium leading-relaxed text-slate-600">
+                  <p className="text-sm leading-relaxed font-medium text-slate-600">
                     {msg.content}
                   </p>
                 </div>

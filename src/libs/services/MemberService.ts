@@ -1,4 +1,4 @@
-import { sql, ilike, and, eq, count, or, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { members } from '@/models/Schema';
 
@@ -19,6 +19,11 @@ export type G12Node = {
 /**
  * Busca a hierarquia G12 filtrada.
  * A lógica foi aprimorada para manter a estrutura da árvore mesmo com filtros.
+ * @param orgId - Identificador único da organização.
+ * @param search - Termo de busca opcional por nome ou sobrenome.
+ * @param step - Filtro opcional pelo degrau da jornada.
+ * @param rootId - Identificador opcional do membro raiz da subárvore.
+ * @returns Lista de nós da hierarquia G12.
  */
 export const getFilteredG12Hierarchy = async (orgId: string, search?: string, step?: string, rootId?: string) => {
   const query = sql`
@@ -71,16 +76,18 @@ export const getFilteredG12Hierarchy = async (orgId: string, search?: string, st
   // Se houver busca, precisamos garantir que mostramos apenas ramos que contenham o resultado
   if (search || step) {
     const matchedIds = new Set(allNodes.filter(n => n.isMatch || (step && n.currentStep === step)).map(n => n.id));
-    
+
     // Se não achou nada, retorna vazio
-    if (matchedIds.size === 0) return [];
+    if (matchedIds.size === 0) {
+      return [];
+    }
 
     // Sobe a árvore marcando quem deve ser exibido (ancestrais dos matches)
     const visibleIds = new Set<string>(matchedIds);
     let added = true;
     while (added) {
       added = false;
-      allNodes.forEach(node => {
+      allNodes.forEach((node) => {
         if (node.leaderId && visibleIds.has(node.id) && !visibleIds.has(node.leaderId)) {
           visibleIds.add(node.leaderId);
           added = true;
@@ -101,9 +108,9 @@ export const getStatsByGeneration = async (orgId: string) => {
     .select({ slot: members.generationSlot, count: count() })
     .from(members)
     .where(and(
-      eq(members.organizationId, orgId), 
+      eq(members.organizationId, orgId),
       sql`${members.generationSlot} IS NOT NULL`,
-      isNull(members.deletedAt)
+      isNull(members.deletedAt),
     ))
     .groupBy(members.generationSlot)
     .orderBy(members.generationSlot);
@@ -130,15 +137,18 @@ export const getMembersByGenerationSlot = async (orgId: string, slot: number) =>
     .from(members)
     .leftJoin(sql`${members} as leader`, eq(members.leaderId, sql`leader.id`))
     .where(and(
-      eq(members.organizationId, orgId), 
+      eq(members.organizationId, orgId),
       eq(members.generationSlot, slot),
-      isNull(members.deletedAt)
+      isNull(members.deletedAt),
     ))
     .orderBy(members.firstName);
 };
 
 /**
  * Realiza a exclusão lógica de um membro.
+ * @param id - Identificador único do membro a ser excluído.
+ * @param orgId - Identificador único da organização do membro.
+ * @returns Resultado da operação de atualização.
  */
 export const softDeleteMember = async (id: string, orgId: string) => {
   return await db

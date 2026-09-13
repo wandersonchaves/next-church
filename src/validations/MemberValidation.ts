@@ -13,6 +13,7 @@ export const MemberSchema = z.object({
   currentStep: z.enum(journeyStepEnum.enumValues),
   // Tornamos obrigatório no schema para casar com o formulário, o default vai no useForm
   isBaptized: z.boolean(),
+  kidsNotes: z.string().optional().nullable().or(z.literal('')),
 });
 
 export const StepCompletionSchema = z.object({

@@ -84,12 +84,18 @@ export const GlobalHeader = () => {
 
         {/* AÇÕES E PERFIL */}
         <div className="flex items-center gap-4">
-          <button className="hidden h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900 md:flex">
+          <button
+            type="button"
+            className="hidden h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-900 md:flex"
+          >
             <Search size={20} />
           </button>
 
           <div className="relative">
-            <button className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            >
               <Bell size={20} />
               <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full border-2 border-white bg-blue-600" />
             </button>
@@ -107,6 +113,7 @@ export const GlobalHeader = () => {
 
           {/* MOBILE MENU TOGGLE */}
           <button
+            type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white md:hidden"
           >
@@ -117,7 +124,7 @@ export const GlobalHeader = () => {
 
       {/* MOBILE NAV */}
       {isMenuOpen && (
-        <div className="animate-in slide-in-from-top border-t border-slate-50 bg-white p-6 duration-300 md:hidden">
+        <div className="border-t border-slate-50 bg-white p-6 transition-all duration-300 md:hidden">
           <div className="mb-6 block md:hidden">
             <OrganizationSwitcher hidePersonal />
           </div>

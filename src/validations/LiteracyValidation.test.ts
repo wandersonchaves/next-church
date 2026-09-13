@@ -23,6 +23,7 @@ describe('LiteracyStudentSchema', () => {
     };
 
     const result = LiteracyStudentSchema.safeParse(validData);
+
     expect(result.success).toBe(true);
   });
 
@@ -39,7 +40,9 @@ describe('LiteracyStudentSchema', () => {
     };
 
     const result = LiteracyStudentSchema.safeParse(invalidData);
+
     expect(result.success).toBe(false);
+
     if (!result.success) {
       expect(result.error.issues[0]?.path).toContain('studentName');
     }
@@ -58,7 +61,9 @@ describe('LiteracyStudentSchema', () => {
     };
 
     const result = LiteracyStudentSchema.safeParse(invalidData);
+
     expect(result.success).toBe(false);
+
     if (!result.success) {
       expect(result.error.issues[0]?.path).toContain('guardianPhone');
     }

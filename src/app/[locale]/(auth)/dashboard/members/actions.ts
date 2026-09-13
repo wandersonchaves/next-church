@@ -5,20 +5,25 @@ import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/libs/DB';
 import { inngest } from '@/libs/Inngest';
-import { journeyHistory, memberJourneys, members } from '@/models/Schema';
-import { MemberSchema, StepCompletionSchema } from '@/validations/MemberValidation';
 import { logActivity } from '@/libs/services/AuditService';
 import { softDeleteMember } from '@/libs/services/MemberService';
+import { journeyHistory, memberJourneys, members } from '@/models/Schema';
+import { MemberSchema, StepCompletionSchema } from '@/validations/MemberValidation';
 
 /**
  * Adiciona um novo integrante com resiliência a falhas de side-effects.
+ * @param data - Dados do membro validados pelo MemberSchema.
  */
 export async function createMemberAction(data: any) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Organization required' };
+  if (!orgId) {
+    return { error: 'Organization required' };
+  }
 
   const validated = MemberSchema.safeParse(data);
-  if (!validated.success) return { error: 'Dados inválidos ou incompletos.' };
+  if (!validated.success) {
+    return { error: 'Dados inválidos ou incompletos.' };
+  }
 
   let createdMember = null;
 
@@ -45,9 +50,10 @@ export async function createMemberAction(data: any) {
         birthDate: new Date(validated.data.birthDate),
         gender: validated.data.gender,
         leaderId: leaderId || null,
-        lineage: lineage,
+        lineage,
         generationSlot: validated.data.generationSlot ? Number(validated.data.generationSlot) : null,
         isBaptized: validated.data.isBaptized || false,
+        kidsNotes: validated.data.kidsNotes || null,
         currentStep: validated.data.currentStep || 'DECISION',
       }).returning();
 
@@ -55,16 +61,15 @@ export async function createMemberAction(data: any) {
     });
 
     if (createdMember) {
-      await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName}`).catch(() => {});
+      await logActivity('CREATE', 'MEMBER', `${createdMember.firstName} ${createdMember.lastName}`).catch(() => { });
       await inngest.send({
         name: 'member/created',
-        data: { memberId: createdMember.id, organizationId: orgId }
-      }).catch(() => {});
+        data: { memberId: createdMember.id, organizationId: orgId },
+      }).catch(() => { });
     }
 
     revalidatePath('/[locale]/dashboard', 'layout');
     return { success: true, data: createdMember };
-
   } catch (e) {
     console.error('[CREATE_MEMBER_ERROR]', e);
     return { error: 'Erro ao salvar integrante.' };
@@ -73,18 +78,26 @@ export async function createMemberAction(data: any) {
 
 /**
  * Atualiza um membro com resiliência.
+ * @param memberId - Identificador UUID do membro.
+ * @param data - Dados atualizados do membro.
  */
 export async function updateMemberAction(memberId: string, data: any) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Unauthorized' };
+  if (!orgId) {
+    return { error: 'Unauthorized' };
+  }
 
   const validated = MemberSchema.safeParse(data);
-  if (!validated.success) return { error: 'Dados inválidos' };
+  if (!validated.success) {
+    return { error: 'Dados inválidos' };
+  }
 
   try {
     await db.transaction(async (tx) => {
       const [currentMember] = await tx.select().from(members).where(eq(members.id, memberId)).limit(1);
-      if (!currentMember) throw new Error("Membro não encontrado");
+      if (!currentMember) {
+        throw new Error('Membro não encontrado');
+      }
 
       let newLineage = currentMember.lineage;
       if (validated.data.leaderId !== currentMember.leaderId) {
@@ -108,6 +121,7 @@ export async function updateMemberAction(memberId: string, data: any) {
           lineage: newLineage,
           generationSlot: validated.data.generationSlot ? Number(validated.data.generationSlot) : null,
           isBaptized: validated.data.isBaptized,
+          kidsNotes: validated.data.kidsNotes || null,
           updatedAt: new Date(),
         })
         .where(and(eq(members.id, memberId), eq(members.organizationId, orgId)));
@@ -125,14 +139,19 @@ export async function updateMemberAction(memberId: string, data: any) {
 
 /**
  * Realiza a exclusão lógica (soft delete) de um membro.
+ * @param memberId - Identificador UUID do membro.
  */
 export async function deleteMemberAction(memberId: string) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Unauthorized' };
+  if (!orgId) {
+    return { error: 'Unauthorized' };
+  }
 
   try {
     const [member] = await db.select().from(members).where(and(eq(members.id, memberId), eq(members.organizationId, orgId))).limit(1);
-    if (!member) return { error: 'Membro não encontrado.' };
+    if (!member) {
+      return { error: 'Membro não encontrado.' };
+    }
 
     await softDeleteMember(memberId, orgId);
 
@@ -148,35 +167,42 @@ export async function deleteMemberAction(memberId: string) {
 
 /**
  * Conclui um passo na jornada do integrante.
+ * @param data - Objeto com memberId e step da jornada.
  */
 export async function completeJourneyStepAction(data: any) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Unauthorized' };
+  if (!orgId) {
+    return { error: 'Unauthorized' };
+  }
   const validated = StepCompletionSchema.safeParse(data);
-  if (!validated.success) return { error: 'Dados inválidos' };
+  if (!validated.success) {
+    return { error: 'Dados inválidos' };
+  }
 
   try {
     const result = await db.transaction(async (tx) => {
       const [member] = await tx.select().from(members).where(and(eq(members.id, validated.data.memberId), eq(members.organizationId, orgId)));
-      if (!member) return { error: 'Membro não encontrado' };
+      if (!member) {
+        return { error: 'Membro não encontrado' };
+      }
 
-      await tx.insert(memberJourneys).values({ 
-        organizationId: orgId, 
-        memberId: validated.data.memberId, 
-        step: validated.data.step, 
-        notes: validated.data.notes || `Progredido para ${validated.data.step}` 
+      await tx.insert(memberJourneys).values({
+        organizationId: orgId,
+        memberId: validated.data.memberId,
+        step: validated.data.step,
+        notes: validated.data.notes || `Progredido para ${validated.data.step}`,
       });
 
-      await tx.update(members).set({ 
-        currentStep: validated.data.step, 
-        updatedAt: new Date() 
+      await tx.update(members).set({
+        currentStep: validated.data.step,
+        updatedAt: new Date(),
       }).where(eq(members.id, validated.data.memberId));
 
-      await tx.insert(journeyHistory).values({ 
-        memberId: validated.data.memberId, 
-        oldStep: member.currentStep, 
-        newStep: validated.data.step, 
-        notes: validated.data.notes 
+      await tx.insert(journeyHistory).values({
+        memberId: validated.data.memberId,
+        oldStep: member.currentStep,
+        newStep: validated.data.step,
+        notes: validated.data.notes,
       });
 
       return { success: true, memberName: `${member.firstName} ${member.lastName}` };
@@ -184,15 +210,15 @@ export async function completeJourneyStepAction(data: any) {
 
     if (result.success) {
       await logActivity('PROMOTE', 'MEMBER', `${result.memberName} (${validated.data.step})`).catch(() => { });
-      await inngest.send({ 
-        name: 'member/step.completed', 
-        data: { 
-          memberId: validated.data.memberId, 
-          organizationId: orgId, 
-          newStep: validated.data.step 
-        } 
+      await inngest.send({
+        name: 'member/step.completed',
+        data: {
+          memberId: validated.data.memberId,
+          organizationId: orgId,
+          newStep: validated.data.step,
+        },
       }).catch(() => { });
-      
+
       revalidatePath('/[locale]/dashboard', 'layout');
     }
     return result;
@@ -204,10 +230,14 @@ export async function completeJourneyStepAction(data: any) {
 
 /**
  * Atualiza o status de batismo de um membro.
+ * @param memberId - Identificador UUID do membro.
+ * @param isBaptized - Indicador booleano de batismo.
  */
 export async function markAsBaptizedAction(memberId: string, isBaptized: boolean) {
   const { orgId } = await auth();
-  if (!orgId) return { error: 'Unauthorized' };
+  if (!orgId) {
+    return { error: 'Unauthorized' };
+  }
 
   try {
     await db.update(members)
@@ -216,13 +246,14 @@ export async function markAsBaptizedAction(memberId: string, isBaptized: boolean
 
     revalidatePath('/[locale]/dashboard/communication/responses');
     return { success: true };
-  } catch (e) {
+  } catch {
     return { error: 'Falha ao atualizar batismo.' };
   }
 }
 
 /**
  * Atalho para marcar membro como inativo (Soft Delete).
+ * @param memberId - Identificador UUID do membro.
  */
 export async function markAsInactiveAction(memberId: string) {
   return await deleteMemberAction(memberId);

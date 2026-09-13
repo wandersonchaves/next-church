@@ -20,23 +20,23 @@ export default async function Layout(props: {
       leftNav={(
         <div className="flex items-center gap-x-10">
           <li>
-            <Link href="/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
+            <Link href="/" className="text-sm font-bold tracking-widest text-slate-600 uppercase transition-colors hover:text-blue-600">
               {t('home_link')}
             </Link>
           </li>
           <li>
-            <Link href="/about/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
+            <Link href="/about/" className="text-sm font-bold tracking-widest text-slate-600 uppercase transition-colors hover:text-blue-600">
               {t('about_link')}
             </Link>
           </li>
           <li>
-            <Link href="/portfolio/" className="text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors uppercase tracking-widest">
+            <Link href="/portfolio/" className="text-sm font-bold tracking-widest text-slate-600 uppercase transition-colors hover:text-blue-600">
               {t('portfolio_link')}
             </Link>
           </li>
           <SignedIn>
             <li>
-              <Link href="/dashboard/" className="text-sm font-black text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-widest">
+              <Link href="/dashboard/" className="text-sm font-black tracking-widest text-blue-600 uppercase transition-colors hover:text-blue-800">
                 Painel
               </Link>
             </li>
@@ -47,14 +47,14 @@ export default async function Layout(props: {
         <div className="flex items-center gap-x-8">
           <SignedOut>
             <li>
-              <Link href="/sign-in/" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
+              <Link href="/sign-in/" className="text-sm font-bold text-slate-500 transition-colors hover:text-slate-900">
                 {t('sign_in_link')}
               </Link>
             </li>
             <li>
               <Link
                 href="/sign-up/"
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                className="rounded-xl bg-blue-600 px-6 py-2.5 text-xs font-black tracking-widest text-white uppercase shadow-lg shadow-blue-100 transition-all hover:bg-blue-700 active:scale-95"
               >
                 {t('sign_up_link')}
               </Link>

@@ -16,7 +16,7 @@ import { LiteracyOfficialReportDocument } from './LiteracyOfficialReportDocument
 
 export const LiteracyExportModal = (props: {
   isOpen: boolean;
-  onClose: () => void;
+  onCloseAction: () => void;
   students: LiteracyExportStudent[];
   organizationName: string;
 }) => {
@@ -54,7 +54,7 @@ export const LiteracyExportModal = (props: {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      logLiteracyExportAuditAction(selectedStatus, filteredStudents.length).catch(() => {});
+      logLiteracyExportAuditAction(selectedStatus, filteredStudents.length).catch(() => { });
     } catch (error) {
       console.error('Erro ao baixar planilha CSV:', error);
     } finally {
@@ -77,7 +77,7 @@ export const LiteracyExportModal = (props: {
           {/* BOTÃO FECHAR */}
           <button
             type="button"
-            onClick={props.onClose}
+            onClick={props.onCloseAction}
             className="absolute top-6 right-6 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
             <X size={20} />
@@ -119,10 +119,9 @@ export const LiteracyExportModal = (props: {
                     key={item.id}
                     type="button"
                     onClick={() => setSelectedStatus(item.id)}
-                    className={`flex items-center justify-between rounded-xl border p-2.5 text-left font-bold transition-all ${
-                      selectedStatus === item.id
-                        ? 'border-blue-600 bg-blue-50/80 text-blue-700 shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    className={`flex items-center justify-between rounded-xl border p-2.5 text-left font-bold transition-all ${selectedStatus === item.id
+                      ? 'border-blue-600 bg-blue-50/80 text-blue-700 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
                     <span>{item.label}</span>
@@ -238,7 +237,7 @@ export const LiteracyExportModal = (props: {
 
             <button
               type="button"
-              onClick={props.onClose}
+              onClick={props.onCloseAction}
               className="rounded-xl border border-slate-200 p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             >
               <X size={16} />

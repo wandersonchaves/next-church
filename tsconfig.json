@@ -1,29 +1,29 @@
 {
   "compilerOptions": {
+    "incremental": true,
     "target": "esnext",
+    "jsx": "react-jsx",
     "lib": [
       "dom",
       "dom.iterable",
       "esnext"
     ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    "baseUrl": ".",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
       ]
     },
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
     "plugins": [
       {
         "name": "next"
@@ -41,10 +41,6 @@
   "exclude": [
     "node_modules",
     "**/*.stories.tsx",
-    "**/*.test.tsx",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/*.e2e.ts",
-    "**/tests/**"
+    "**/*.e2e.ts"
   ]
 }

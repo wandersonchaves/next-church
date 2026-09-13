@@ -9,7 +9,7 @@ export const Env = createEnv({
     EVOLUTION_API_KEY: z.string().min(1),
     EVOLUTION_INSTANCE: z.string().optional(),
     EVOLUTION_BASE_URL: z.string().url().default('https://evolution-go.up.railway.app'),
-    ADMIN_PHONE: z.string().optional(),              
+    ADMIN_PHONE: z.string().optional(),
     ALERT_EVOLUTION_API_KEY: z.string().optional(),
     ALERT_EVOLUTION_INSTANCE: z.string().optional(),
     INNGEST_EVENT_KEY: z.string().optional(),

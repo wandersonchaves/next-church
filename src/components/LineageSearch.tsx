@@ -1,15 +1,15 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { useTransition, useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useTransition } from 'react';
 
 export function LineageSearch() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
+
   // Estado local para o valor do input para uma UI responsiva
   const [value, setValue] = useState(searchParams.get('search') || '');
 
@@ -17,7 +17,9 @@ export function LineageSearch() {
   useEffect(() => {
     // Se o valor for igual ao que já está na URL, não faz nada
     const currentSearch = searchParams.get('search') || '';
-    if (value === currentSearch) return;
+    if (value === currentSearch) {
+      return;
+    }
 
     const timer = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
@@ -26,7 +28,7 @@ export function LineageSearch() {
       } else {
         params.delete('search');
       }
-      
+
       startTransition(() => {
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
       });
@@ -37,16 +39,16 @@ export function LineageSearch() {
 
   return (
     <div className="relative w-full md:w-72">
-      <Search 
-        className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isPending ? 'text-indigo-500 animate-pulse' : 'text-slate-400'}`} 
-        size={16} 
+      <Search
+        className={`absolute top-1/2 left-4 -translate-y-1/2 transition-colors ${isPending ? 'animate-pulse text-indigo-500' : 'text-slate-400'}`}
+        size={16}
       />
       <input
         type="text"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={e => setValue(e.target.value)}
         placeholder="Pesquisar na linhagem..."
-        className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500/20 transition-all shadow-sm"
+        className="w-full rounded-2xl border border-slate-200 bg-white py-3 pr-4 pl-12 text-sm font-medium shadow-sm transition-all outline-none focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5"
       />
     </div>
   );

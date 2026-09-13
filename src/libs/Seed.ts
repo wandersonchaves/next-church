@@ -1,6 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { ministries } from '@/models/Schema';
-import { eq } from 'drizzle-orm';
 
 /**
  * Módulo de Inicialização (Seed) para novas Organizações.
@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 export const SeedService = {
   /**
    * Inicializa uma organização com dados padrão se ela estiver vazia.
+   * @param orgId - Identificador único da organização.
    */
   async initializeOrganization(orgId: string) {
     // 1. Verifica se já existem ministérios
@@ -18,7 +19,9 @@ export const SeedService = {
       .where(eq(ministries.organizationId, orgId))
       .limit(1);
 
-    if (existing.length > 0) return;
+    if (existing.length > 0) {
+      return;
+    }
 
     // 2. Ministérios Padrão
     const defaultMinistries = [
@@ -36,11 +39,11 @@ export const SeedService = {
           organizationId: orgId,
           name: m.name,
           description: m.description,
-        }))
+        })),
       );
-      console.log(`[SEED] Org ${orgId} inicializada com ministérios padrão.`);
+      console.warn(`[SEED] Org ${orgId} inicializada com ministérios padrão.`);
     } catch (e) {
       console.error(`[SEED_ERROR] Erro ao inicializar org ${orgId}:`, e);
     }
-  }
+  },
 };

@@ -1,11 +1,12 @@
 'use client';
 
-import { Filter, Info, Loader2, Send, MessageSquare, CheckCircle2, XCircle, MessageCircle, Users, AlertCircle, RefreshCw, Smartphone, Key } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Filter, Info, Key, Loader2, MessageCircle, MessageSquare, RefreshCw, Send, Smartphone, Users, XCircle } from 'lucide-react';
+import { useLocale } from 'next-intl';
+import Link from 'next/link';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
-import { sendBroadcastAction, syncWebhookAction, getWhatsAppStatusAction, getRecipientCountAction, getQRCodeAction, connectInstanceAction, pairInstanceAction } from './actions';
-import Link from 'next/link';
-import { useLocale } from 'next-intl';
+import { connectInstanceAction, getQRCodeAction, getRecipientCountAction, getWhatsAppStatusAction, pairInstanceAction, sendBroadcastAction, syncWebhookAction } from './actions';
+import { TestRecipientsManager } from './TestRecipientsManager';
 
 const SAFETY_LIMIT = 100;
 
@@ -16,11 +17,12 @@ export default function CommunicationPage() {
   const [step, setStep] = React.useState('');
   const [generation, setGeneration] = React.useState('');
   const [tag, setTag] = React.useState('');
-  const [literacyShift, setLiteracyShift] = React.useState('');
+  const [literacyShift] = React.useState('');
   const [literacyStatus, setLiteracyStatus] = React.useState('');
   const [recipientCount, setRecipientCount] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
+  const [syncNotice, setSyncNotice] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<{ connected: boolean; loggedIn?: boolean; name?: string } | null>(null);
   const [qrCode, setQrCode] = React.useState<string | null>(null);
   const [pairingCode, setPairingCode] = React.useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function CommunicationPage() {
         setStatus({
           connected: res.status.connected,
           loggedIn: res.status.loggedIn,
-          name: res.status.name as string | undefined
+          name: res.status.name as string | undefined,
         });
 
         // Se estiver conectado mas não logado, tenta buscar o QR Code se não tivermos um
@@ -88,30 +90,32 @@ export default function CommunicationPage() {
           if (attempts >= 5) {
             clearInterval(poll);
             setQrLoading(false);
-            if (!qrCode) setError("QR Code demorou muito para gerar. Tente atualizar.");
+            if (!qrCode) {
+              setError('QR Code demorou muito para gerar. Tente atualizar.');
+            }
           }
         }, 2000);
       }
     } else {
-      setError("Falha ao iniciar conexão da instância.");
+      setError('Falha ao iniciar conexão da instância.');
       setQrLoading(false);
     }
   }
 
   async function handlePair() {
     if (!phoneNumber || phoneNumber.length < 10) {
-      alert("Digite um número válido com DDD (ex: 86995206925)");
+      setError('Digite um número válido com DDD (ex: 86995206925)');
       return;
     }
     setQrLoading(true);
     setQrCode(null);
     setPairingCode(null);
-    
+
     const res = await pairInstanceAction(phoneNumber);
     if (res.success && res.code) {
       setPairingCode(res.code);
     } else {
-      setError("Falha ao gerar código de pareamento. Verifique se o número está correto.");
+      setError('Falha ao gerar código de pareamento. Verifique se o número está correto.');
     }
     setQrLoading(false);
   }
@@ -136,9 +140,11 @@ export default function CommunicationPage() {
 
   async function handleSync() {
     setSyncing(true);
+    setSyncNotice(null);
+    setError(null);
     const res = await syncWebhookAction();
     if (res.success) {
-      alert('Conexão sincronizada com sucesso! As mensagens agora devem chegar.');
+      setSyncNotice('Conexão sincronizada com sucesso! As mensagens agora devem chegar.');
     } else {
       setError(res.error || 'Erro ao sincronizar conexão.');
     }
@@ -174,6 +180,16 @@ export default function CommunicationPage() {
     setLoading(false);
   }
 
+  function handleSelectTestTag() {
+    setTargetAudience('MEMBERS');
+    setTag('TESTE_PRD');
+    setStep('');
+    setGeneration('');
+    if (!message) {
+      setMessage('Olá {name}! Este é um disparo de teste oficial em PRD do NextChurch. 🚀');
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 font-sans lg:p-8">
       <div className="mx-auto max-w-350 space-y-8">
@@ -192,26 +208,29 @@ export default function CommunicationPage() {
                   <>
                     <span className="h-1 w-1 rounded-full bg-slate-200" />
                     <div
-                      className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${
-                        status.connected && status.loggedIn
-                          ? 'text-emerald-600'
-                          : status.connected && !status.loggedIn
+                      className={`flex items-center gap-1 text-[9px] font-black tracking-widest uppercase ${status.connected && status.loggedIn
+                        ? 'text-emerald-600'
+                        : status.connected && !status.loggedIn
                           ? 'text-amber-600'
                           : 'text-rose-600'
                       }`}
                     >
-                      {status.connected && status.loggedIn ? (
-                        <CheckCircle2 size={10} />
-                      ) : status.connected && !status.loggedIn ? (
-                        <RefreshCw size={10} />
-                      ) : (
-                        <XCircle size={10} />
-                      )}
+                      {status.connected && status.loggedIn
+                        ? (
+                            <CheckCircle2 size={10} />
+                          )
+                        : status.connected && !status.loggedIn
+                          ? (
+                              <RefreshCw size={10} />
+                            )
+                          : (
+                              <XCircle size={10} />
+                            )}
                       {status.connected && status.loggedIn
                         ? `Online: ${status.name || 'WhatsApp'}`
                         : status.connected && !status.loggedIn
-                        ? 'Aguardando Login (QR Code)'
-                        : 'Desconectado'}
+                          ? 'Aguardando Login (QR Code)'
+                          : 'Desconectado'}
                     </div>
                   </>
                 )}
@@ -237,6 +256,7 @@ export default function CommunicationPage() {
             </Link>
 
             <button
+              type="button"
               onClick={handleSync}
               disabled={syncing}
               className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-[10px] font-black tracking-widest text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:opacity-50"
@@ -250,102 +270,129 @@ export default function CommunicationPage() {
 
         {status && (!status.connected || !status.loggedIn) && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4">
+            <div className="space-y-4 lg:col-span-2">
               <Alert
                 type="warning"
                 title="Conexão Requerida"
-                message={!status.connected 
-                  ? "Sua instância do WhatsApp está desconectada do servidor Evolution. Clique em 'Conectar Instância' para iniciar o motor de conexão."
-                  : "Sua instância está online, mas você precisa realizar o login. Escaneie o QR Code ao lado ou use o Código de Pareamento."
-                }
+                message={!status.connected
+                  ? 'Sua instância do WhatsApp está desconectada do servidor Evolution. Clique em \'Conectar Instância\' para iniciar o motor de conexão.'
+                  : 'Sua instância está online, mas você precisa realizar o login. Escaneie o QR Code ao lado ou use o Código de Pareamento.'}
                 className="border-rose-200 bg-rose-50 text-rose-800"
               />
-              
+
               {!status.loggedIn && (
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="mb-4 flex items-center gap-2">
                     <Key size={16} className="text-indigo-600" />
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-700">Entrar com Código de Pareamento</h4>
+                    <h4 className="text-[10px] font-black tracking-widest text-slate-700 uppercase">Entrar com Código de Pareamento</h4>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="Ex: 5586995206925"
                       value={phoneNumber}
                       onChange={e => setPhoneNumber(e.target.value)}
                       className="flex-1 rounded-xl border-none bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/5"
                     />
                     <button
+                      type="button"
                       onClick={handlePair}
                       disabled={qrLoading || !phoneNumber}
                       className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-[10px] font-black tracking-widest text-white uppercase transition-all hover:bg-slate-800 disabled:opacity-50"
                     >
-                      {qrLoading && pairingCode ? <Loader2 className="animate-spin" size={14} /> : "Gerar Código"}
+                      {qrLoading && pairingCode ? <Loader2 className="animate-spin" size={14} /> : 'Gerar Código'}
                     </button>
                   </div>
-                  
+
                   {pairingCode && (
                     <div className="mt-4 rounded-2xl bg-indigo-50 p-4 text-center">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Seu Código de 8 dígitos</p>
-                      <p className="text-2xl font-black tracking-[0.3em] text-indigo-600 my-1">
+                      <p className="text-[9px] font-black tracking-widest text-indigo-400 uppercase">Seu Código de 8 dígitos</p>
+                      <p className="my-1 text-2xl font-black tracking-[0.3em] text-indigo-600">
                         {typeof pairingCode === 'string' ? pairingCode : 'Código Gerado'}
                       </p>
-                      <p className="text-[10px] font-medium text-indigo-400 leading-tight">No WhatsApp do seu celular, vá em: <br/> Aparelhos Conectados {'>'} Conectar com número de telefone.</p>
+                      <p className="text-[10px] leading-tight font-medium text-indigo-400">
+                        No WhatsApp do seu celular, vá em:
+                        <br />
+                        {' '}
+                        Aparelhos Conectados
+                        {'>'}
+                        {' '}
+                        Conectar com número de telefone.
+                      </p>
                     </div>
                   )}
                 </div>
               )}
             </div>
-            
-            <div className="rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-xl flex flex-col items-center justify-center gap-6 text-center min-h-[350px]">
-              {!status.connected ? (
-                <div className="space-y-4">
-                  <div className="mx-auto w-16 h-16 rounded-3xl bg-slate-50 flex items-center justify-center text-slate-300">
-                    <Smartphone size={32} />
-                  </div>
-                  <button
-                    onClick={handleConnect}
-                    disabled={qrLoading}
-                    className="flex items-center gap-3 rounded-2xl bg-indigo-600 px-10 py-5 font-black tracking-widest text-white uppercase shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                  >
-                    {qrLoading ? <Loader2 className="animate-spin" size={20} /> : <Smartphone size={20} />}
-                    Conectar Instância
-                  </button>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase leading-relaxed">Isso iniciará o processo de boot. <br/> Aguarde alguns segundos após clicar.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="relative h-56 w-56 overflow-hidden rounded-[2rem] bg-slate-50 flex items-center justify-center border-4 border-white shadow-inner">
-                    {qrLoading && !qrCode ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="animate-spin text-indigo-600" size={40} />
-                        <p className="text-[9px] font-black text-indigo-400 uppercase">Gerando QR...</p>
+
+            <div className="flex min-h-87.5 flex-col items-center justify-center gap-6 rounded-[2.5rem] border border-slate-200 bg-white p-8 text-center shadow-xl">
+              {!status.connected
+                ? (
+                    <div className="space-y-4">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-50 text-slate-300">
+                        <Smartphone size={32} />
                       </div>
-                    ) : qrCode && typeof qrCode === 'string' ? (
-                      <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain p-2" />
-                    ) : (
-                      <div className="p-6">
-                        <XCircle size={32} className="mx-auto text-slate-200 mb-2" />
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">QR Code expirado ou indisponível</p>
+                      <button
+                        type="button"
+                        onClick={handleConnect}
+                        disabled={qrLoading}
+                        className="flex items-center gap-3 rounded-2xl bg-indigo-600 px-10 py-5 font-black tracking-widest text-white uppercase shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                      >
+                        {qrLoading ? <Loader2 className="animate-spin" size={20} /> : <Smartphone size={20} />}
+                        Conectar Instância
+                      </button>
+                      <p className="text-[9px] leading-relaxed font-bold text-slate-400 uppercase">
+                        Isso iniciará o processo de boot.
+                        <br />
+                        {' '}
+                        Aguarde alguns segundos após clicar.
+                      </p>
+                    </div>
+                  )
+                : (
+                    <>
+                      <div className="relative flex h-56 w-56 items-center justify-center overflow-hidden rounded-4xl border-4 border-white bg-slate-50 shadow-inner">
+                        {qrLoading && !qrCode
+                          ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <Loader2 className="animate-spin text-indigo-600" size={40} />
+                                <p className="text-[9px] font-black text-indigo-400 uppercase">Gerando QR...</p>
+                              </div>
+                            )
+                          : qrCode && typeof qrCode === 'string'
+                            ? (
+                                <img src={qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`} alt="WhatsApp QR Code" className="h-full w-full object-contain p-2" />
+                              )
+                            : (
+                                <div className="p-6">
+                                  <XCircle size={32} className="mx-auto mb-2 text-slate-200" />
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">QR Code expirado ou indisponível</p>
+                                </div>
+                              )}
                       </div>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleFetchQR}
-                      disabled={qrLoading}
-                      className="flex items-center justify-center gap-2 w-full text-[10px] font-black tracking-widest text-indigo-600 uppercase hover:underline disabled:opacity-50"
-                    >
-                      <RefreshCw size={12} className={qrLoading ? 'animate-spin' : ''} />
-                      Atualizar QR Code
-                    </button>
-                    <p className="text-[9px] font-medium text-slate-400 uppercase italic">Expira em 40 segundos</p>
-                  </div>
-                </>
-              )}
+                      <div className="space-y-3">
+                        <button
+                          type="button"
+                          onClick={handleFetchQR}
+                          disabled={qrLoading}
+                          className="flex w-full items-center justify-center gap-2 text-[10px] font-black tracking-widest text-indigo-600 uppercase hover:underline disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={qrLoading ? 'animate-spin' : ''} />
+                          Atualizar QR Code
+                        </button>
+                        <p className="text-[9px] font-medium text-slate-400 uppercase italic">Expira em 40 segundos</p>
+                      </div>
+                    </>
+                  )}
             </div>
           </div>
         )}
+
+        {/* PAINEL DE HOMOLOGAÇÃO / TESTES EM PRD */}
+        <TestRecipientsManager
+          currentMessage={message}
+          onSelectTestTagAction={handleSelectTestTag}
+        />
 
         {/* CONTÊINER PRINCIPAL COM FLEX WRAP (Fase 4) */}
         <div className="flex flex-col gap-8 lg:flex-row">
@@ -386,12 +433,17 @@ export default function CommunicationPage() {
                     <div className={`flex items-center gap-1.5 ${recipientCount > SAFETY_LIMIT ? 'text-rose-600' : 'text-indigo-600'}`}>
                       {recipientCount > SAFETY_LIMIT ? <AlertCircle size={12} /> : <Users size={12} />}
                       <span className="text-[10px] font-black tracking-widest uppercase">
-                        Estimativa: {recipientCount} {recipientCount === 1 ? 'destinatário' : 'destinatários'}
+                        Estimativa:
+                        {' '}
+                        {recipientCount}
+                        {' '}
+                        {recipientCount === 1 ? 'destinatário' : 'destinatários'}
                       </span>
                     </div>
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={handleSend}
                   disabled={loading || !message || recipientCount === 0}
                   className={`flex w-full items-center justify-center gap-3 rounded-2xl px-12 py-4 font-black tracking-widest text-white uppercase shadow-xl transition-all sm:w-auto ${loading || recipientCount === 0 ? 'bg-slate-400' : 'bg-indigo-600 shadow-indigo-200 hover:scale-[1.02] active:scale-[0.98]'}`}
@@ -401,6 +453,14 @@ export default function CommunicationPage() {
                 </button>
               </div>
             </div>
+
+            {syncNotice && (
+              <Alert
+                type="success"
+                title="Sincronização"
+                message={syncNotice}
+              />
+            )}
 
             {success && (
               <Alert
@@ -430,15 +490,14 @@ export default function CommunicationPage() {
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Público-Alvo / Lista</label>
+                  <span className="ml-2 block text-[9px] font-black tracking-widest text-slate-400 uppercase">Público-Alvo / Lista</span>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setTargetAudience('MEMBERS')}
-                      className={`py-3 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                        targetAudience === 'MEMBERS'
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`rounded-xl px-2 py-3 text-xs font-black tracking-wider uppercase transition-all ${targetAudience === 'MEMBERS'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       👥 Membros G12
@@ -446,10 +505,9 @@ export default function CommunicationPage() {
                     <button
                       type="button"
                       onClick={() => setTargetAudience('LITERACY')}
-                      className={`py-3 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                        targetAudience === 'LITERACY'
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`rounded-xl px-2 py-3 text-xs font-black tracking-wider uppercase transition-all ${targetAudience === 'LITERACY'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       📚 Alfabetização
@@ -457,60 +515,63 @@ export default function CommunicationPage() {
                   </div>
                 </div>
 
-                {targetAudience === 'MEMBERS' ? (
-                  <>
-                    <div className="space-y-2">
-                      <label htmlFor="journeyStep" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Etapa da Jornada</label>
-                      <select value={step} onChange={e => setStep(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Toda a Igreja</option>
-                        {['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'].map(s => (
-                          <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
-                    </div>
+                {targetAudience === 'MEMBERS'
+                  ? (
+                      <>
+                        <div className="space-y-2">
+                          <label htmlFor="journeyStep" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Etapa da Jornada</label>
+                          <select id="journeyStep" value={step} onChange={e => setStep(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                            <option value="">Toda a Igreja</option>
+                            {['DECISION', 'CELL', 'UNIVERSITY_OF_LIFE', 'ENCOUNTER', 'LEADERSHIP_TRAINING', 'RE_ENCOUNTER', 'SENDING'].map(s => (
+                              <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div className="space-y-2">
-                      <label htmlFor="leaderGeneration" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Geração do Líder</label>
-                      <select value={generation} onChange={e => setGeneration(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Todas as Linhagens</option>
-                        {Array.from({ length: 12 }, (_, i) => (
-                          <option key={i + 1} value={i + 1}>
-                            {`Geração F${i + 1}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        <div className="space-y-2">
+                          <label htmlFor="leaderGeneration" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Geração do Líder</label>
+                          <select id="leaderGeneration" value={generation} onChange={e => setGeneration(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                            <option value="">Todas as Linhagens</option>
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <option key={i + 1} value={i + 1}>
+                                {`Geração F${i + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div className="space-y-2">
-                      <label htmlFor="tagFilter" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Tag / Evento</label>
-                      <select value={tag} onChange={e => setTag(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Nenhuma Tag</option>
-                        <option value="BATISMO_2026">Batismo 2026</option>
-                      </select>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="space-y-2">
-                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Horário das Turmas</label>
-                      <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs font-bold text-indigo-700 flex items-center gap-2">
-                        <span>🌙</span>
-                        <span>Todas as turmas serão no período da Noite</span>
-                      </div>
-                    </div>
+                        <div className="space-y-2">
+                          <label htmlFor="tagFilter" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Tag / Evento</label>
+                          <select id="tagFilter" value={tag} onChange={e => setTag(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                            <option value="">Nenhuma Tag</option>
+                            <option value="TESTE_PRD">🧪 Ambiente de Teste (PRD)</option>
+                            <option value="BATISMO_2026">Batismo 2026</option>
+                          </select>
+                        </div>
+                      </>
+                    )
+                  : (
+                      <>
+                        <div className="space-y-2">
+                          <span className="ml-2 block text-[9px] font-black tracking-widest text-slate-400 uppercase">Horário das Turmas</span>
+                          <div className="flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs font-bold text-indigo-700">
+                            <span>🌙</span>
+                            <span>Todas as turmas serão no período da Noite</span>
+                          </div>
+                        </div>
 
-                    <div className="space-y-2">
-                      <label className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Status do Aluno</label>
-                      <select value={literacyStatus} onChange={e => setLiteracyStatus(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
-                        <option value="">Todos os Inscritos da Alfabetização</option>
-                        <option value="INSCRITO">Inscritos (Pendentes)</option>
-                        <option value="CONFIRMADO">Confirmados</option>
-                        <option value="TURMA_FORMADA">Em Turma Formada</option>
-                        <option value="DESISTENTE">Desistentes</option>
-                      </select>
-                    </div>
-                  </>
-                )}
+                        <div className="space-y-2">
+                          <label htmlFor="literacyStatus" className="ml-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">Status do Aluno</label>
+                          <select id="literacyStatus" value={literacyStatus} onChange={e => setLiteracyStatus(e.target.value)} className="w-full cursor-pointer rounded-xl border-none bg-slate-50 px-5 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5">
+                            <option value="">Todos os Inscritos da Alfabetização</option>
+                            <option value="INSCRITO">Inscritos (Pendentes)</option>
+                            <option value="CONFIRMADO">Confirmados</option>
+                            <option value="TURMA_FORMADA">Em Turma Formada</option>
+                            <option value="DESISTENTE">Desistentes</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
               </div>
 
               {/* Dica de Throttling integrada ao fluxo (Fase 4) */}

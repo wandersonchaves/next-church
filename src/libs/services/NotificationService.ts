@@ -6,7 +6,8 @@ export const NotificationService = {
   /**
    * Resolves a member and their organization by phone number.
    * Handles Brazil's 9th digit complexity by matching the suffix.
-   * @param phone
+   * @param phone - Número de telefone do membro com ou sem DDD/código do país.
+   * @returns Membro correspondente ou null se não encontrado.
    */
   async findMemberByPhone(phone: string) {
     try {
@@ -83,13 +84,14 @@ export const NotificationService = {
 
   /**
    * Persists an incoming message from Evolution GO.
-   * @param data
-   * @param data.sender
-   * @param data.content
-   * @param data.instanceId
-   * @param data.instanceName
-   * @param data.externalId
-   * @param data.parentExternalId
+   * @param data - Dados da mensagem recebida via webhook.
+   * @param data.sender - Número ou identificador do remetente.
+   * @param data.content - Conteúdo de texto da mensagem.
+   * @param data.instanceId - Identificador único da instância no Evolution API.
+   * @param data.instanceName - Nome amigável opcional da instância.
+   * @param data.externalId - ID externo da mensagem no WhatsApp.
+   * @param data.parentExternalId - ID da mensagem pai referenciada em caso de resposta.
+   * @returns Resultado do processamento e persistência da mensagem.
    */
   async saveIncomingMessage(data: {
     sender: string;
@@ -220,12 +222,12 @@ export const NotificationService = {
 
   /**
    * Persists an outgoing message.
-   * @param data
-   * @param data.phone
-   * @param data.content
-   * @param data.organizationId
-   * @param data.status
-   * @param data.externalId
+   * @param data - Dados da mensagem enviada para registro de log.
+   * @param data.phone - Número de telefone de destino com DDD.
+   * @param data.content - Conteúdo de texto da mensagem enviada.
+   * @param data.organizationId - Identificador da organização remetente.
+   * @param data.status - Status do envio (SENT ou FAILED).
+   * @param data.externalId - Identificador externo opcional da mensagem.
    */
   async saveOutgoingMessage(data: {
     phone: string;
@@ -254,10 +256,10 @@ export const NotificationService = {
 
   /**
    * Logs connection state changes in the audit log.
-   * @param instanceId
-   * @param state
-   * @param organizationId
-   * @param instanceName
+   * @param instanceId - Identificador da instância do WhatsApp.
+   * @param state - Novo estado da conexão da instância.
+   * @param organizationId - Identificador opcional da organização.
+   * @param instanceName - Nome amigável opcional da instância.
    */
   async logConnectionState(instanceId: string, state: string, organizationId?: string, instanceName?: string) {
     // Se não passar orgId, tenta o fallback (mas agora o syncWebhookAction passa)
@@ -284,9 +286,10 @@ export const NotificationService = {
 
   /**
    * Fetches recent incoming messages for an organization.
-   * @param organizationId
-   * @param instanceFilter
-   * @param limit
+   * @param organizationId - Identificador da organização.
+   * @param instanceFilter - Filtro opcional por nome ou id da instância.
+   * @param limit - Quantidade máxima de mensagens a retornar.
+   * @returns Lista de mensagens recebidas.
    */
   async getIncomingMessages(organizationId: string, instanceFilter?: string, limit = 50) {
     const conditions = [
@@ -321,8 +324,9 @@ export const NotificationService = {
   /**
    * Busca respostas interativas vinculadas a perguntas enviadas.
    * Inteligência: Se não houver vínculo direto (reply), busca a última mensagem enviada.
-   * @param organizationId
-   * @param limit
+   * @param organizationId - Identificador da organização para consulta.
+   * @param limit - Limite de registros a retornar.
+   * @returns Lista de respostas correlacionadas com perguntas.
    */
   async getSurveyResponses(organizationId: string, limit = 50) {
     // 1. Busca mensagens recebidas (Inngest ou Direct)

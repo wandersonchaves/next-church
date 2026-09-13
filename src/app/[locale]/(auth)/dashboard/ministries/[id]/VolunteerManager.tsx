@@ -1,98 +1,115 @@
 'use client';
 
+import { Check, Loader2, Search, Trash2, UserPlus } from 'lucide-react';
 import * as React from 'react';
-import { Search, UserPlus, Check, X, Loader2, Trash2 } from 'lucide-react';
 import { linkMemberToMinistryAction, unlinkMemberFromMinistryAction } from '../actions';
 
-interface Member {
+type Member = {
   id: string;
   firstName: string;
   lastName: string;
-}
+};
 
-interface Volunteer {
+type Volunteer = {
   id: string;
   firstName: string;
   lastName: string;
   role: string | null;
-}
+};
 
-export default function VolunteerManager({
-  ministryId,
-  allMembers,
-  initialVolunteers
-}: {
-  ministryId: string,
-  allMembers: Member[],
-  initialVolunteers: Volunteer[]
+export default function VolunteerManager(props: {
+  ministryId: string;
+  allMembers: Member[];
+  initialVolunteers: Volunteer[];
 }) {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [role, setRole] = React.useState('VOLUNTÁRIO');
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const [isLinking, setIsLinking] = React.useState(false);
-  const [volunteers, setVolunteers] = React.useState(initialVolunteers);
+  const [confirmUnlinkId, setConfirmUnlinkId] = React.useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const filteredMembers = React.useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return [];
-    return allMembers.filter(m =>
-      `${m.firstName} ${m.lastName}`.toLowerCase().includes(term) &&
-      !volunteers.some(v => v.id === m.id)
-    ).slice(0, 5);
-  }, [searchTerm, allMembers, volunteers]);
+  const term = searchTerm.toLowerCase().trim();
+  const filteredMembers = term
+    ? props.allMembers.filter(m =>
+        `${m.firstName} ${m.lastName}`.toLowerCase().includes(term)
+        && !props.initialVolunteers.some(v => v.id === m.id),
+      ).slice(0, 5)
+    : [];
 
   const handleLink = async () => {
-    if (!selectedMemberId) return;
+    if (!selectedMemberId) {
+      return;
+    }
     setIsLinking(true);
-    const res = await linkMemberToMinistryAction(selectedMemberId, ministryId, role);
+    setErrorMessage(null);
+    const res = await linkMemberToMinistryAction(selectedMemberId, props.ministryId, role);
     if (res.success) {
-      window.location.reload(); // Recarrega para sincronizar estado do servidor
+      window.location.reload();
     } else {
-      alert(res.error);
+      setErrorMessage(res.error || 'Falha ao vincular membro.');
       setIsLinking(false);
     }
   };
 
   const handleUnlink = async (memberId: string) => {
-    if (!confirm("Remover este membro do ministério?")) return;
-    const res = await unlinkMemberFromMinistryAction(memberId, ministryId);
+    if (confirmUnlinkId !== memberId) {
+      setConfirmUnlinkId(memberId);
+      return;
+    }
+    setErrorMessage(null);
+    const res = await unlinkMemberFromMinistryAction(memberId, props.ministryId);
     if (res.success) {
       window.location.reload();
+    } else {
+      setErrorMessage(res.error || 'Falha ao remover voluntário.');
+      setConfirmUnlinkId(null);
     }
   };
 
   return (
     <div className="space-y-10">
-
       {/* SEÇÃO DE ADICIONAR */}
-      <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-xl space-y-6">
+      <section className="space-y-6 rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 text-blue-600 rounded-xl"><UserPlus size={18} /></div>
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight italic">Escalar Voluntário</h3>
+          <div className="rounded-xl bg-blue-100 p-2 text-blue-600"><UserPlus size={18} /></div>
+          <h3 className="text-lg font-black tracking-tight text-slate-800 uppercase italic">Escalar Voluntário</h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1 relative">
+        {errorMessage && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-600">
+            {errorMessage}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="relative md:col-span-1">
             <div className="relative">
-              <Search className="absolute left-4 top-4 text-slate-400" size={16} />
+              <Search className="absolute top-4 left-4 text-slate-400" size={16} />
               <input
                 type="text"
                 placeholder="Pesquisar membro..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5"
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full rounded-2xl border-none bg-slate-50 py-4 pr-4 pl-12 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5"
               />
             </div>
 
             {filteredMembers.length > 0 && (
-              <div className="absolute z-50 w-full mt-2 bg-white rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
+              <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
                 {filteredMembers.map(m => (
                   <button
                     key={m.id}
-                    onClick={() => { setSelectedMemberId(m.id); setSearchTerm(`${m.firstName} ${m.lastName}`); }}
-                    className="w-full text-left px-4 py-3 hover:bg-blue-50 text-sm font-bold flex justify-between items-center"
+                    type="button"
+                    onClick={() => {
+                      setSelectedMemberId(m.id);
+                      setSearchTerm(`${m.firstName} ${m.lastName}`);
+                    }}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-bold hover:bg-blue-50"
                   >
-                    {m.firstName} {m.lastName}
+                    {m.firstName}
+                    {' '}
+                    {m.lastName}
                     {selectedMemberId === m.id && <Check size={14} className="text-blue-600" />}
                   </button>
                 ))}
@@ -104,51 +121,76 @@ export default function VolunteerManager({
             type="text"
             placeholder="Função (ex: Vocal, Mídia...)"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5"
+            onChange={e => setRole(e.target.value)}
+            className="w-full rounded-2xl border-none bg-slate-50 px-6 py-4 font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5"
           />
 
           <button
+            type="button"
             onClick={handleLink}
             disabled={!selectedMemberId || isLinking}
-            className="w-full bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-600 transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-[10px] font-black tracking-widest text-white uppercase shadow-lg transition-all hover:bg-blue-600 active:scale-95 disabled:opacity-50"
           >
-            {isLinking ? <Loader2 className="animate-spin" size={16} /> : "Adicionar à Equipe"}
+            {isLinking ? <Loader2 className="animate-spin" size={16} /> : 'Adicionar à Equipe'}
           </button>
         </div>
       </section>
 
       {/* LISTA DE EQUIPE */}
       <section className="space-y-6">
-        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight italic flex items-center gap-3">
-          Integrantes Ativos ({volunteers.length})
+        <h3 className="flex items-center gap-3 text-xl font-black tracking-tight text-slate-800 uppercase italic">
+          Integrantes Ativos (
+          {props.initialVolunteers.length}
+          )
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {volunteers.map((v) => (
-            <div key={v.id} className="bg-white p-6 rounded-4xl border border-slate-100 shadow-md flex items-center justify-between group hover:border-red-100 transition-all">
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 font-black shrink-0">
-                  {v.firstName[0]}{v.lastName[0]}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {props.initialVolunteers.map(v => (
+            <div key={v.id} className="group flex items-center justify-between rounded-4xl border border-slate-100 bg-white p-6 shadow-md transition-all hover:border-red-100">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-50 font-black text-slate-400">
+                  {v.firstName[0]}
+                  {v.lastName[0]}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-slate-800 truncate">{v.firstName} {v.lastName}</p>
-                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{v.role || 'Voluntário'}</p>
+                  <p className="truncate font-bold text-slate-800">
+                    {v.firstName}
+                    {' '}
+                    {v.lastName}
+                  </p>
+                  <p className="mt-0.5 text-[10px] font-black tracking-widest text-blue-600 uppercase">{v.role || 'Voluntário'}</p>
                 </div>
               </div>
 
-              <button
-                onClick={() => handleUnlink(v.id)}
-                className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="flex items-center gap-1">
+                {confirmUnlinkId === v.id && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmUnlinkId(null)}
+                    className="rounded-lg px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                  >
+                    Cancelar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleUnlink(v.id)}
+                  className={`rounded-xl p-3 transition-all ${
+                    confirmUnlinkId === v.id
+                      ? 'bg-red-600 text-white shadow-md'
+                      : 'text-slate-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600'
+                  }`}
+                  title={confirmUnlinkId === v.id ? 'Confirmar remoção' : 'Remover'}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             </div>
           ))}
 
-          {volunteers.length === 0 && (
-            <div className="col-span-full py-20 bg-slate-50/50 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
-              <p className="text-slate-400 font-bold text-sm uppercase tracking-widest italic">Nenhum voluntário escalado ainda.</p>
+          {props.initialVolunteers.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center rounded-[2.5rem] border-2 border-dashed border-slate-200 bg-slate-50/50 py-20 text-center">
+              <p className="text-sm font-bold tracking-widest text-slate-400 uppercase italic">Nenhum voluntário escalado ainda.</p>
             </div>
           )}
         </div>

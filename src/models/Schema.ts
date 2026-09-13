@@ -1,5 +1,5 @@
-import { pgEnum, pgTable, text, timestamp, varchar, uuid, index, boolean, integer, primaryKey } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { boolean, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 
 /**
  * Enums para consistência de dados
@@ -11,7 +11,7 @@ export const journeyStepEnum = pgEnum('journey_step', [
   'ENCOUNTER',
   'LEADERSHIP_TRAINING',
   'RE_ENCOUNTER',
-  'SENDING'
+  'SENDING',
 ]);
 
 export const genderEnum = pgEnum('gender', ['M', 'F']);
@@ -46,30 +46,7 @@ export const literacyEducationEnum = pgEnum('literacy_education', [
  * Tabelas do Sistema
  */
 
-// 1. Ministérios
-export const ministries = pgTable('ministries', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: varchar('organization_id', { length: 255 }).notNull(),
-  name: text('name').notNull(),
-  description: text('description'),
-  leaderId: uuid('leader_id').references((): any => members.id),
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-}, (table) => [
-  index('ministry_org_idx').on(table.organizationId),
-]);
-
-// 2. Membros <-> Ministérios
-export const memberMinistries = pgTable('member_to_ministries', {
-  memberId: uuid('member_id').references(() => members.id, { onDelete: 'cascade' }).notNull(),
-  ministryId: uuid('ministry_id').references(() => ministries.id, { onDelete: 'cascade' }).notNull(),
-  role: text('role').default('VOLUNTÁRIO'),
-  joinedAt: timestamp('joined_at', { mode: 'date' }).defaultNow().notNull(),
-}, (table) => [
-  primaryKey({ columns: [table.memberId, table.ministryId] }),
-  index('member_ministry_idx').on(table.memberId),
-]);
-
-// 3. Membros
+// 1. Membros
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: varchar('organization_id', { length: 255 }).notNull(),
@@ -94,10 +71,33 @@ export const members = pgTable('members', {
     .$onUpdate(() => new Date())
     .notNull(),
   deletedAt: timestamp('deleted_at', { mode: 'date' }),
-}, (table) => [
+}, table => [
   index('member_org_idx').on(table.organizationId),
   index('member_leader_idx').on(table.leaderId),
   index('member_lineage_idx').on(table.lineage),
+]);
+
+// 2. Ministérios
+export const ministries = pgTable('ministries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: varchar('organization_id', { length: 255 }).notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  leaderId: uuid('leader_id').references((): any => members.id),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+}, table => [
+  index('ministry_org_idx').on(table.organizationId),
+]);
+
+// 3. Membros <-> Ministérios
+export const memberMinistries = pgTable('member_to_ministries', {
+  memberId: uuid('member_id').references(() => members.id, { onDelete: 'cascade' }).notNull(),
+  ministryId: uuid('ministry_id').references(() => ministries.id, { onDelete: 'cascade' }).notNull(),
+  role: text('role').default('VOLUNTÁRIO'),
+  joinedAt: timestamp('joined_at', { mode: 'date' }).defaultNow().notNull(),
+}, table => [
+  primaryKey({ columns: [table.memberId, table.ministryId] }),
+  index('member_ministry_idx').on(table.memberId),
 ]);
 
 // 4. Detalhes da Jornada (Conclusão de Passos)
@@ -146,7 +146,7 @@ export const auditLogs = pgTable('audit_logs', {
   entityType: varchar('entity_type', { length: 50 }).notNull(),
   entityName: text('entity_name'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-}, (table) => [
+}, table => [
   index('audit_org_idx').on(table.organizationId),
   index('audit_created_idx').on(table.createdAt),
 ]);
@@ -177,7 +177,7 @@ export const literacyStudents = pgTable('literacy_students', {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
-}, (table) => [
+}, table => [
   index('literacy_org_idx').on(table.organizationId),
   index('literacy_status_idx').on(table.status),
   index('literacy_shift_idx').on(table.preferredShift),

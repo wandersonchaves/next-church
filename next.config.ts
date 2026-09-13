@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import withBundleAnalyzer from '@next/bundle-analyzer';
 import { withSentryConfig } from '@sentry/nextjs';
 import createNextIntlPlugin from 'next-intl/plugin';
 import './src/libs/Env';
@@ -15,7 +16,7 @@ const baseConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   generateBuildId: async () => {
-    // Usar o SHA do commit ou um timestamp garante que o Next.js 
+    // Usar o SHA do commit ou um timestamp garante que o Next.js
     // sempre use o manifesto de funções correto após o deploy.
     return process.env.RAILWAY_GIT_COMMIT_SHA || `production-${new Date().getTime()}`;
   },
@@ -25,18 +26,14 @@ const baseConfig: NextConfig = {
   },
 };
 
-// Initialize the Next-Intl plugin
-let configWithPlugins = createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig);
+// Initialize the Next-Intl plugin and Bundle Analyzer
+const bundleAnalyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
 
-// Conditionally enable bundle analysis with dynamic require for safety
-if (process.env.ANALYZE === 'true') {
-  try {
-    const withBundleAnalyzer = require('@next/bundle-analyzer')();
-    configWithPlugins = withBundleAnalyzer(configWithPlugins);
-  } catch (e) {
-    console.warn("Bundle analyzer not found, skipping analysis.");
-  }
-}
+let configWithPlugins = bundleAnalyzer(
+  createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig),
+);
 
 // Conditionally enable Sentry configuration
 if (!process.env.NEXT_PUBLIC_SENTRY_DISABLED) {

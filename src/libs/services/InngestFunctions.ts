@@ -1,15 +1,15 @@
-import { db } from '@/libs/DB';
-import { members, notificationLogs, literacyStudents } from '@/models/Schema';
-import { eq, and, isNull, sql, gte } from 'drizzle-orm';
-import { inngest } from '@/libs/Inngest';
-import { WhatsAppService } from './WhatsAppService';
-import { getWeeklySummary } from './AuditService';
 import { clerkClient } from '@clerk/nextjs/server';
-import { AppConfig } from '@/utils/AppConfig';
-import { NotificationService } from './NotificationService';
+import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
+import { inngest } from '@/libs/Inngest';
 import { handleIncomingMessageUseCase } from '@/libs/services/HandleIncomingMessageUseCase';
+import { literacyStudents, members, notificationLogs } from '@/models/Schema';
+import { AppConfig } from '@/utils/AppConfig';
+import { getWeeklySummary } from './AuditService';
+import { NotificationService } from './NotificationService';
+import { WhatsAppService } from './WhatsAppService';
 
 /**
  * Monitor de Conexão WhatsApp.
@@ -17,35 +17,35 @@ import { handleIncomingMessageUseCase } from '@/libs/services/HandleIncomingMess
  * Também disparado no boot do sistema.
  */
 export const watchdogWhatsAppConnection = inngest.createFunction(
-  { 
-    id: "watchdog-whatsapp-connection", 
-    name: "Monitor de Conexão WhatsApp",
+  {
+    id: 'watchdog-whatsapp-connection',
+    name: 'Monitor de Conexão WhatsApp',
     triggers: [
-      { cron: "0 */3 * * *" },
-      { event: "system/connection.check" }
-    ]
+      { cron: '0 */3 * * *' },
+      { event: 'system/connection.check' },
+    ],
   },
   async ({ step }) => {
-    console.info("🕵️ [WATCHDOG] Iniciando verificação de conexão...");
+    console.warn('🕵️ [WATCHDOG] Iniciando verificação de conexão...');
 
-    const status = await step.run("check-connection", async () => {
+    const status = await step.run('check-connection', async () => {
       const client = EvolutionGoClient.getInstance();
       const res = await client.getInstanceStatus();
-      console.log(`🕵️ [WATCHDOG] Status da instância: ${res.connected ? 'ONLINE' : 'OFFLINE'} | LoggedIn: ${res.loggedIn ? 'SIM' : 'NÃO'}`);
+      console.warn(`🕵️ [WATCHDOG] Status da instância: ${res.connected ? 'ONLINE' : 'OFFLINE'} | LoggedIn: ${res.loggedIn ? 'SIM' : 'NÃO'}`);
       return res;
     });
 
     if (!status.connected || !(status as any).loggedIn) {
       // 🛡️ TRAVA DE SEGURANÇA: Só alerta se o último registro for há mais de 2h50m
-      const shouldAlert = await step.run("check-cooldown", async () => {
+      const shouldAlert = await step.run('check-cooldown', async () => {
         const lastAlert = await db
           .select({ createdAt: sql`max(created_at)` })
           .from(sql`audit_logs`)
           .where(and(
             eq(sql`entity_id`, Env.EVOLUTION_INSTANCE || 'unknown'),
-            eq(sql`action`, 'DISCONNECTED_WATCHDOG')
+            eq(sql`action`, 'DISCONNECTED_WATCHDOG'),
           ));
-        
+
         if (lastAlert[0]?.createdAt) {
           const lastTime = new Date(lastAlert[0].createdAt as string).getTime();
           const now = new Date().getTime();
@@ -56,23 +56,23 @@ export const watchdogWhatsAppConnection = inngest.createFunction(
       });
 
       if (!shouldAlert) {
-        console.log("⏳ [WATCHDOG] Alerta ignorado devido ao Cooldown (menos de 3 horas desde o último).");
+        console.warn('⏳ [WATCHDOG] Alerta ignorado devido ao Cooldown (menos de 3 horas desde o último).');
         return { status: 'cooldown_active' };
       }
 
-      console.warn("⚠️ [WATCHDOG] Instância indisponível ou deslogada! Iniciando procedimentos de alerta...");
+      console.warn('⚠️ [WATCHDOG] Instância indisponível ou deslogada! Iniciando procedimentos de alerta...');
 
-      await step.run("log-disconnection", async () => {
+      await step.run('log-disconnection', async () => {
         await NotificationService.logConnectionState(
           Env.EVOLUTION_INSTANCE || 'unknown',
           'DISCONNECTED_WATCHDOG',
           undefined,
-          'System Watchdog'
+          'System Watchdog',
         );
       });
 
       if (Env.ADMIN_PHONE) {
-        await step.run("send-admin-alert", async () => {
+        await step.run('send-admin-alert', async () => {
           const message = [
             `🚨 *ALERTA DE DESCONEXÃO: ${AppConfig.name.toUpperCase()}*`,
             `Sua instância do WhatsApp está desconectada.`,
@@ -80,25 +80,27 @@ export const watchdogWhatsAppConnection = inngest.createFunction(
             `Isso pode impedir o envio de mensagens automáticas e relatórios agendados.`,
             `Por favor, acesse o painel e reconecte seu dispositivo.`,
             ``,
-            `_Verificado em: ${new Date().toLocaleString('pt-BR')}_`
+            `_Verificado em: ${new Date().toLocaleString('pt-BR')}_`,
           ].join('\n');
 
           await WhatsAppService.sendMessage({
             phone: Env.ADMIN_PHONE!,
-            message: message,
+            message,
             overrides: {
               instanceName: Env.ALERT_EVOLUTION_INSTANCE,
-              apiKey: Env.ALERT_EVOLUTION_API_KEY
-            }
+              apiKey: Env.ALERT_EVOLUTION_API_KEY,
+            },
           });
         });
       }
     }
-  }
+  },
 );
 
 /**
  * Helper para buscar o nome da igreja no Clerk.
+ * @param orgId - Identificador único da organização.
+ * @returns Nome da organização ou valor padrão de fallback.
  */
 async function getChurchName(orgId: string) {
   try {
@@ -117,7 +119,7 @@ export const onMemberCreated = inngest.createFunction(
   {
     id: 'on-member-created',
     name: 'Novo Membro: Boas-vindas',
-    triggers: [{ event: 'member/created' }]
+    triggers: [{ event: 'member/created' }],
   },
   async ({ event, step }: { event: any; step: any }) => {
     const { memberId, organizationId } = event.data;
@@ -131,7 +133,7 @@ export const onMemberCreated = inngest.createFunction(
         .where(and(
           eq(members.id, memberId),
           eq(members.organizationId, organizationId),
-          isNull(members.deletedAt)
+          isNull(members.deletedAt),
         ))
         .limit(1);
       return result;
@@ -143,7 +145,7 @@ export const onMemberCreated = inngest.createFunction(
         await WhatsAppService.sendMessage({
           phone: member.phone!,
           message: welcomeMessage,
-          organizationId: organizationId
+          organizationId,
         });
       });
     }
@@ -159,7 +161,7 @@ export const onStepCompleted = inngest.createFunction(
   {
     id: 'on-step-completed',
     name: 'Jornada: Parabéns pelo Passo',
-    triggers: [{ event: 'member/step.completed' }]
+    triggers: [{ event: 'member/step.completed' }],
   },
   async ({ event, step }: { event: any; step: any }) => {
     const { memberId, organizationId, newStep } = event.data;
@@ -173,7 +175,7 @@ export const onStepCompleted = inngest.createFunction(
         .where(and(
           eq(members.id, memberId),
           eq(members.organizationId, organizationId),
-          isNull(members.deletedAt)
+          isNull(members.deletedAt),
         ))
         .limit(1);
       return result;
@@ -184,8 +186,8 @@ export const onStepCompleted = inngest.createFunction(
         const message = `Parabéns ${member.firstName}! Você concluiu o passo *${newStep.replace(/_/g, ' ')}* na jornada da *${churchName}*. Continue firme! ✨`;
         await WhatsAppService.sendMessage({
           phone: member.phone!,
-          message: message,
-          organizationId: organizationId
+          message,
+          organizationId,
         });
       });
     }
@@ -197,12 +199,12 @@ export const onStepCompleted = inngest.createFunction(
  */
 export const weeklyLeadershipReport = inngest.createFunction(
   {
-    id: "weekly-leadership-report",
-    name: "Cron: Relatório Semanal",
-    triggers: [{ cron: "0 11 * * 1" }]
+    id: 'weekly-leadership-report',
+    name: 'Cron: Relatório Semanal',
+    triggers: [{ cron: '0 11 * * 1' }],
   },
   async ({ step }: any) => {
-    const orgs = await step.run("fetch-organizations", async () => {
+    const orgs = await step.run('fetch-organizations', async () => {
       return await db.selectDistinct({ id: members.organizationId }).from(members);
     });
 
@@ -236,13 +238,13 @@ export const weeklyLeadershipReport = inngest.createFunction(
               ``,
               `Total de *${summary.stats.total}* ações realizadas.`,
               ``,
-              `_Gerado por ${AppConfig.name}_`
+              `_Gerado por ${AppConfig.name}_`,
             ].join('\n');
 
             await WhatsAppService.sendMessage({
               phone: pastor.phone!,
-              message: message,
-              organizationId: org.id
+              message,
+              organizationId: org.id,
             });
           });
 
@@ -250,7 +252,7 @@ export const weeklyLeadershipReport = inngest.createFunction(
         }
       }
     }
-  }
+  },
 );
 
 /**
@@ -258,17 +260,17 @@ export const weeklyLeadershipReport = inngest.createFunction(
  */
 export const dailyBirthdayCheck = inngest.createFunction(
   {
-    id: "daily-birthday-check",
-    name: "Cron: Parabéns Aniversariantes",
-    triggers: [{ cron: "15 12 * * *" }]
+    id: 'daily-birthday-check',
+    name: 'Cron: Parabéns Aniversariantes',
+    triggers: [{ cron: '15 12 * * *' }],
   },
   async ({ step }) => {
-    const membersList = await step.run("fetch-birthday-members", async () => {
+    const membersList = await step.run('fetch-birthday-members', async () => {
       return await db.select().from(members).where(
         and(
           sql`EXTRACT(DAY FROM ${members.birthDate}) = EXTRACT(DAY FROM CURRENT_DATE) AND EXTRACT(MONTH FROM ${members.birthDate}) = EXTRACT(MONTH FROM CURRENT_DATE)`,
-          isNull(members.deletedAt)
-        )
+          isNull(members.deletedAt),
+        ),
       );
     });
 
@@ -279,7 +281,7 @@ export const dailyBirthdayCheck = inngest.createFunction(
           await WhatsAppService.sendMessage({
             phone: member.phone!,
             message: msg,
-            organizationId: member.organizationId
+            organizationId: member.organizationId,
           });
         });
 
@@ -287,7 +289,7 @@ export const dailyBirthdayCheck = inngest.createFunction(
         await step.sleep(`wait-bday-${member.id}`, `${delay}s`);
       }
     }
-  }
+  },
 );
 
 /**
@@ -297,7 +299,7 @@ export const sendBroadcast = inngest.createFunction(
   {
     id: 'send-broadcast',
     name: 'Comunicação: Transmissão em Massa',
-    triggers: [{ event: 'notification/broadcast.send' }]
+    triggers: [{ event: 'notification/broadcast.send' }],
   },
   async ({ event, step }: { event: any; step: any }) => {
     const { organizationId, filters, message } = event.data;
@@ -359,19 +361,19 @@ export const sendBroadcast = inngest.createFunction(
               eq(notificationLogs.memberId, member.id),
               eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
               eq(notificationLogs.status, 'SENT'),
-              gte(notificationLogs.sentAt, threeMinutesAgo)
+              gte(notificationLogs.sentAt, threeMinutesAgo),
             ),
           });
           return Boolean(recentLog);
         });
 
         if (alreadySent) {
-          console.info(`[BROADCAST_SKIP] Message already sent to ${member.firstName} (${member.phone}) in the last 3 minutes. Skipping duplicate.`);
+          console.warn(`[BROADCAST_SKIP] Message already sent to ${member.firstName} (${member.phone}) in the last 3 minutes. Skipping duplicate.`);
           continue;
         }
 
         await step.run(`send-${member.id}`, async () => {
-          console.info(`[BROADCAST] Sending message ${count}/${recipients.length} to ${member.firstName} (${member.phone})`);
+          console.warn(`[BROADCAST] Sending message ${count}/${recipients.length} to ${member.firstName} (${member.phone})`);
           const result = await WhatsAppService.sendMessage({
             phone: member.phone!,
             message: personalizedMessage,
@@ -381,7 +383,7 @@ export const sendBroadcast = inngest.createFunction(
           if (!result.sent) {
             console.warn(`[BROADCAST_WARN] Failed to send message to ${member.firstName}: ${result.error || result.reason}`);
           } else {
-            console.info(`[BROADCAST_OK] Dispatched message to ${member.firstName} (ID: ${result.externalId || 'N/A'})`);
+            console.warn(`[BROADCAST_OK] Dispatched message to ${member.firstName} (ID: ${result.externalId || 'N/A'})`);
           }
 
           return result;
@@ -407,7 +409,7 @@ export const onWhatsAppWebhook = inngest.createFunction(
   {
     id: 'on-whatsapp-webhook-final',
     name: 'WhatsApp: Webhook Engine',
-    triggers: [{ event: 'whatsapp/webhook.received' }]
+    triggers: [{ event: 'whatsapp/webhook.received' }],
   },
   async ({ event, step }: { event: any; step: any }) => {
     const payload = event.data;
@@ -415,9 +417,9 @@ export const onWhatsAppWebhook = inngest.createFunction(
     const instanceId = payload.instanceId || payload.data?.instanceId || 'unknown';
     const instanceName = payload.instanceName || payload.data?.instanceName || 'unknown';
 
-    if (Env.EVOLUTION_INSTANCE &&
-      instanceId !== Env.EVOLUTION_INSTANCE &&
-      instanceName !== Env.EVOLUTION_INSTANCE) {
+    if (Env.EVOLUTION_INSTANCE
+      && instanceId !== Env.EVOLUTION_INSTANCE
+      && instanceName !== Env.EVOLUTION_INSTANCE) {
       return { status: 'ignored_unauthorized_instance' };
     }
 
@@ -458,14 +460,14 @@ export const processIncomingMessage = inngest.createFunction(
       }
 
       // Fallback via Audit Logs
-      console.log(`[PROCESS_INCOMING_MSG] Audit log lookup fallback for instanceName=${instanceName}`);
+      console.warn(`[PROCESS_INCOMING_MSG] Audit log lookup fallback for instanceName=${instanceName}`);
       const lastAudit = await db.query.auditLogs.findFirst({
         where: (audit, { or, ilike, and, eq }) => and(
           or(
             instanceId ? ilike(audit.userName, `%${instanceId}%`) : undefined,
-            instanceName ? ilike(audit.userName, `%${instanceName}%`) : undefined
+            instanceName ? ilike(audit.userName, `%${instanceName}%`) : undefined,
           ),
-          eq(audit.userId, 'system-evolution-go')
+          eq(audit.userId, 'system-evolution-go'),
         ),
         orderBy: (audit, { desc }) => [desc(audit.createdAt)],
       });
@@ -488,5 +490,5 @@ export const processIncomingMessage = inngest.createFunction(
     });
 
     return { status: 'completed', result };
-  }
+  },
 );
