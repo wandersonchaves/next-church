@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl';
 import Link from 'next/link';
 import * as React from 'react';
 import { Alert } from '@/components/Dashboard/Alert';
+import { MessageEditorWithEmojis } from '@/components/Dashboard/MessageEditorWithEmojis';
 import { connectInstanceAction, getQRCodeAction, getRecipientCountAction, getWhatsAppStatusAction, pairInstanceAction, sendBroadcastAction, syncWebhookAction } from './actions';
 import { TestRecipientsManager } from './TestRecipientsManager';
 
@@ -174,10 +175,14 @@ export default function CommunicationPage() {
     if (res.success) {
       setSuccess(true);
       setMessage('');
+      // Mantém proteção de cooldown por 3 segundos para evitar cliques repetidos acidentais
+      setTimeout(() => {
+        setLoading(false);
+      }, 3000);
     } else {
       setError('Falha ao processar o envio. Tente novamente.');
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function handleSelectTestTag() {
@@ -409,11 +414,11 @@ export default function CommunicationPage() {
                 </div>
               </div>
 
-              <textarea
+              <MessageEditorWithEmojis
                 value={message}
-                onChange={e => setMessage(e.target.value)}
+                onChangeAction={setMessage}
                 placeholder="Olá {name}! Como vai sua célula?"
-                className="h-80 w-full resize-none rounded-4xl border-none bg-slate-50 p-6 text-lg font-medium text-slate-700 transition-all outline-none focus:ring-4 focus:ring-indigo-500/5"
+                disabled={loading}
               />
 
               {recipientCount !== null && recipientCount > SAFETY_LIMIT && (
