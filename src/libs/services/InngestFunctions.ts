@@ -1,5 +1,5 @@
 import { clerkClient } from '@clerk/nextjs/server';
-import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { EvolutionGoClient } from '@/libs/evolution-go/client';
@@ -300,6 +300,10 @@ export const sendBroadcast = inngest.createFunction(
     id: 'send-broadcast',
     name: 'Comunicação: Transmissão em Massa',
     triggers: [{ event: 'notification/broadcast.send' }],
+    concurrency: {
+      limit: 1,
+      key: 'event.data.organizationId',
+    },
   },
   async ({ event, step }: { event: any; step: any }) => {
     const { organizationId, filters, message } = event.data;
@@ -350,25 +354,31 @@ export const sendBroadcast = inngest.createFunction(
     for (const member of recipients) {
       if (member.phone) {
         count++;
-        const personalizedMessage = message.replace(/\{name\}/g, member.firstName);
+        const personalizedMessage = message.replace(/\{name\}/gi, member.firstName);
 
-        // 🛡️ Trava de envio duplicado: se já enviou mensagem nos últimos 3 minutos, pula
-        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+        // 🛡️ Trava de envio duplicado robusta: verifica por ID do membro e sufixo do telefone nos últimos 5 minutos
+        const cleanPhone = (member.phone || '').replace(/\D/g, '');
+        const suffix8 = cleanPhone.slice(-8);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
         const alreadySent = await step.run(`check-dup-${member.id}`, async () => {
           const recentLog = await db.query.notificationLogs.findFirst({
             where: and(
               eq(notificationLogs.organizationId, organizationId),
-              eq(notificationLogs.memberId, member.id),
               eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
               eq(notificationLogs.status, 'SENT'),
-              gte(notificationLogs.sentAt, threeMinutesAgo),
+              gte(notificationLogs.sentAt, fiveMinutesAgo),
+              or(
+                eq(notificationLogs.memberId, member.id),
+                suffix8 ? ilike(notificationLogs.content, `%${suffix8}%`) : undefined,
+              ),
             ),
           });
           return Boolean(recentLog);
         });
 
         if (alreadySent) {
-          console.warn(`[BROADCAST_SKIP] Message already sent to ${member.firstName} (${member.phone}) in the last 3 minutes. Skipping duplicate.`);
+          console.warn(`[BROADCAST_SKIP] Message already sent to ${member.firstName} (${member.phone}) in the last 5 minutes. Skipping duplicate.`);
           continue;
         }
 
@@ -378,6 +388,7 @@ export const sendBroadcast = inngest.createFunction(
             phone: member.phone!,
             message: personalizedMessage,
             organizationId,
+            memberId: member.id,
           });
 
           if (!result.sent) {

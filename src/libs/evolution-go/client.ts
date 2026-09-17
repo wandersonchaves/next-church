@@ -112,6 +112,7 @@ export class EvolutionGoClient {
    * @param overrides - Optional instance and API key overrides
    * @param overrides.instanceName - Nome da instância customizada para envio.
    * @param overrides.apiKey - Chave de API customizada para autenticação.
+   * @param memberId - Identificador opcional do membro para rastreamento no log.
    * @returns SendMessageResult
    */
   public async sendMessage(
@@ -119,6 +120,7 @@ export class EvolutionGoClient {
     text: string,
     organizationId?: string,
     overrides?: { instanceName?: string; apiKey?: string },
+    memberId?: string | null,
   ): Promise<SendMessageResult> {
     const apiKey = overrides?.apiKey || this.apiKey;
     const instanceName = overrides?.instanceName || this.instanceName;
@@ -182,12 +184,13 @@ export class EvolutionGoClient {
             console.warn(`[EVOLUTION] [SEND_SUCCESS] POST ${url} [HTTP ${response.status}] in ${elapsed}ms | Number: ${num} | Msg ID: ${externalId || 'N/A'}`);
 
             if (organizationId) {
-              NotificationService.saveOutgoingMessage({
+              await NotificationService.saveOutgoingMessage({
                 phone: num,
                 content: text,
                 organizationId,
                 status: 'SENT',
                 externalId: String(externalId || ''),
+                memberId,
               }).catch(e => console.error('[EVOLUTION_LOG_ERROR]', e));
             }
 
@@ -222,11 +225,12 @@ export class EvolutionGoClient {
     console.error(`[EVOLUTION] [SEND_EXHAUSTED] All candidates failed for ${to}. Reason: ${lastError}`);
 
     if (organizationId) {
-      NotificationService.saveOutgoingMessage({
+      await NotificationService.saveOutgoingMessage({
         phone: phoneCandidates[0] || to,
         content: text,
         organizationId,
         status: 'FAILED',
+        memberId,
       }).catch(e => console.error('[EVOLUTION_LOG_ERROR]', e));
     }
 

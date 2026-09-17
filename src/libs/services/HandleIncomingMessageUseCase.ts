@@ -448,16 +448,19 @@ async function syncMemberMinistries(params: {
  * @param params.phone - Recipient phone or WhatsApp JID.
  * @param params.message - Message text content.
  * @param params.organizationId - Organization tenant ID.
+ * @param params.memberId - Optional member ID.
  */
 async function sendAndLogWhatsAppMessage(params: {
   phone: string;
   message: string;
   organizationId: string;
+  memberId?: string | null;
 }): Promise<void> {
   await WhatsAppService.sendMessage({
     phone: params.phone,
     message: params.message,
     organizationId: params.organizationId,
+    memberId: params.memberId,
   });
 
   await NotificationService.saveOutgoingMessage({
@@ -465,6 +468,7 @@ async function sendAndLogWhatsAppMessage(params: {
     content: params.message,
     organizationId: params.organizationId,
     status: 'SENT',
+    memberId: params.memberId,
   });
 }
 
@@ -489,6 +493,7 @@ export async function handleIncomingMessageUseCase(params: {
 
   // 🛑 TRAVA DE DUPLICIDADE: Se a última mensagem recebida já foi respondida (evita envio duplo Direct + Inngest)
   const cleanPhone = cleanPhoneDigits(sender);
+  const suffix8 = cleanPhone.slice(-8);
   const latestIncoming = await db.query.notificationLogs.findFirst({
     where: and(
       eq(notificationLogs.organizationId, organizationId),
@@ -498,25 +503,25 @@ export async function handleIncomingMessageUseCase(params: {
         : or(
             ilike(notificationLogs.content, `[De: ${cleanPhone}]%`),
             ilike(notificationLogs.content, `[De: ${sender.split('@')[0]}]%`),
+            suffix8 ? ilike(notificationLogs.content, `%${suffix8}%`) : undefined,
           ),
     ),
     orderBy: (log, { desc }) => [desc(log.sentAt)],
   });
 
-  const recentReplyWindow = new Date(Date.now() - 15 * 1000);
+  const recentReplyWindow = new Date(Date.now() - 60 * 1000);
   const outgoingThreshold = latestIncoming?.sentAt ?? recentReplyWindow;
 
   const alreadyReplied = await db.query.notificationLogs.findFirst({
     where: and(
       eq(notificationLogs.organizationId, organizationId),
       eq(notificationLogs.type, 'WHATSAPP_OUTGOING'),
-      member?.id
-        ? eq(notificationLogs.memberId, member.id)
-        : or(
-            ilike(notificationLogs.content, `[Para: ${cleanPhone}]%`),
-            ilike(notificationLogs.content, `[Para: ${sender.split('@')[0]}]%`),
-          ),
       gte(notificationLogs.sentAt, outgoingThreshold),
+      or(
+        member?.id ? eq(notificationLogs.memberId, member.id) : undefined,
+        ilike(notificationLogs.content, `%${cleanPhone}%`),
+        suffix8 ? ilike(notificationLogs.content, `%${suffix8}%`) : undefined,
+      ),
     ),
   });
 

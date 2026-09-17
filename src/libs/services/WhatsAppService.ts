@@ -14,6 +14,7 @@ export const WhatsAppService = {
    * @param params.overrides - Configurações opcionais de substituição da instância.
    * @param params.overrides.instanceName - Nome da instância customizada.
    * @param params.overrides.apiKey - Chave de API customizada.
+   * @param params.memberId - Identificador opcional do membro.
    * @returns Resultado do envio com status e detalhes.
    */
   sendMessage: async (params: {
@@ -21,12 +22,13 @@ export const WhatsAppService = {
     message: string;
     organizationId?: string;
     overrides?: { instanceName?: string; apiKey?: string };
+    memberId?: string | null;
   }) => {
-    const { phone, message, organizationId, overrides } = params;
+    const { phone, message, organizationId, overrides, memberId } = params;
     const client = EvolutionGoClient.getInstance();
 
     try {
-      const result = await client.sendMessage(phone, message, organizationId, overrides);
+      const result = await client.sendMessage(phone, message, organizationId, overrides, memberId);
       return result;
     } catch (error) {
       console.error('[WHATSAPP_SERVICE_ERROR]', error);

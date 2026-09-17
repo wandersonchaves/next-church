@@ -1,7 +1,6 @@
 import { revalidatePath } from 'next/cache';
 import { NextResponse } from 'next/server';
 import { inngest } from '@/libs/Inngest';
-import { handleIncomingMessageUseCase } from '@/libs/services/HandleIncomingMessageUseCase';
 import { NotificationService } from '@/libs/services/NotificationService';
 
 export const dynamic = 'force-dynamic';
@@ -97,7 +96,7 @@ export async function POST(req: Request) {
       if (content && sender) {
         console.warn(`[EVOLUTION_WEBHOOK] Incoming user message from ${sender}: "${String(content).slice(0, 100)}"`);
 
-        const saveResult = await NotificationService.saveIncomingMessage({
+        await NotificationService.saveIncomingMessage({
           sender: String(sender),
           content: String(content),
           instanceId: String(body.instanceId || body.instance || ''),
@@ -109,21 +108,7 @@ export async function POST(req: Request) {
           return null;
         });
 
-        const organizationId = saveResult?.organizationId;
-
-        // Dispara análise e correção com IA diretamente de forma assíncrona (não bloqueia resposta HTTP)
-        if (organizationId && !saveResult?.duplicate) {
-          console.warn(`[EVOLUTION_WEBHOOK] Triggering direct AI analysis for ${sender} (Org: ${organizationId})...`);
-          void handleIncomingMessageUseCase({
-            sender: String(sender),
-            content: String(content),
-            organizationId,
-          }).catch((err) => {
-            console.error('[WEBHOOK_DIRECT_AI_HANDLER_ERROR]', err);
-          });
-        }
-
-        // Envia também para o Inngest para redundância e processamentos em segundo plano
+        // Envia para o Inngest para processamento assíncrono com debounce de 10s (evita envios duplicados)
         console.warn(`[EVOLUTION_WEBHOOK] Dispatching whatsapp/message.received for AI analysis to Inngest...`);
         await inngest.send({
           name: 'whatsapp/message.received',

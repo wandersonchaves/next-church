@@ -27,12 +27,16 @@ export const NotificationService = {
 
       console.warn(`[NOTIFICATION_SERVICE] Member Lookup: Original=${phone}, Suffix8=${suffix8}`);
 
-      // Busca por sufixo para ignorar o 9º dígito presente ou ausente
+      // Busca por sufixo tolerante a formatações (8 ou 9 dígitos, com ou sem máscara)
       const results = await db
         .select()
         .from(members)
         .where(and(
-          ilike(members.phone, `%${suffix8}`),
+          or(
+            ilike(members.phone, `%${suffix8}`),
+            ilike(members.phone, `%${suffix8}%`),
+            sql`regexp_replace(COALESCE(${members.phone}, ''), '\\D', '', 'g') LIKE ${`%${suffix8}`}`,
+          ),
           isNull(members.deletedAt), // Ignora membros excluídos
         ))
         .limit(1);
@@ -228,6 +232,7 @@ export const NotificationService = {
    * @param data.organizationId - Identificador da organização remetente.
    * @param data.status - Status do envio (SENT ou FAILED).
    * @param data.externalId - Identificador externo opcional da mensagem.
+   * @param data.memberId - Identificador opcional do membro para rastreamento.
    */
   async saveOutgoingMessage(data: {
     phone: string;
@@ -235,17 +240,22 @@ export const NotificationService = {
     organizationId: string;
     status: 'SENT' | 'FAILED';
     externalId?: string;
+    memberId?: string | null;
   }) {
-    const member = await this.findMemberByPhone(data.phone);
+    let resolvedMemberId = data.memberId ?? null;
+    if (!resolvedMemberId) {
+      const member = await this.findMemberByPhone(data.phone);
+      resolvedMemberId = member?.id || null;
+    }
     const cleanPhone = data.phone.split('@')[0].replace(/\D/g, '');
 
     try {
       await db.insert(notificationLogs).values({
         organizationId: data.organizationId,
-        memberId: member?.id || null,
+        memberId: resolvedMemberId,
         type: 'WHATSAPP_OUTGOING',
         status: data.status,
-        content: `${!member ? `[Para: ${cleanPhone}] ` : ''}${data.content}`,
+        content: `${!resolvedMemberId ? `[Para: ${cleanPhone}] ` : ''}${data.content}`,
         externalId: data.externalId || null,
         sentAt: new Date(),
       });

@@ -1,5 +1,6 @@
 'use server';
 
+import { Buffer } from 'node:buffer';
 import { auth } from '@clerk/nextjs/server';
 import { and, count, eq, ilike, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -90,8 +91,14 @@ export async function sendBroadcastAction(data: z.infer<typeof BroadcastSchema>)
   }
 
   try {
+    // Previne disparo duplicado idêntico dentro do mesmo minuto usando ID de evento do Inngest
+    const minuteBucket = Math.floor(Date.now() / (60 * 1000));
+    const cleanMessage = validated.data.message.trim();
+    const eventId = `broadcast-${orgId}-${minuteBucket}-${cleanMessage.length}-${Buffer.from(cleanMessage.slice(0, 30)).toString('base64url')}`;
+
     // Dispara o workflow do Inngest
     await inngest.send({
+      id: eventId,
       name: 'notification/broadcast.send',
       data: {
         organizationId: orgId,
