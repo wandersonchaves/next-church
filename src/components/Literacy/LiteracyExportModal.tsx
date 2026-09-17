@@ -24,6 +24,7 @@ export const LiteracyExportModal = (props: {
   const [selectedShift, setSelectedShift] = React.useState<string>('ALL');
   const [viewMode, setViewMode] = React.useState<'OPTIONS' | 'PREVIEW'>('OPTIONS');
   const [isDownloading, setIsDownloading] = React.useState(false);
+  const [sortOrder, setSortOrder] = React.useState<'recent' | 'oldest' | 'name'>('recent');
 
   if (!props.isOpen) {
     return null;
@@ -35,6 +36,15 @@ export const LiteracyExportModal = (props: {
     return matchesStatus && matchesShift;
   });
 
+  const sortedStudents = [...filteredStudents].sort((a, b) => {
+    if (sortOrder === 'name') {
+      return a.studentName.localeCompare(b.studentName);
+    }
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return sortOrder === 'recent' ? timeB - timeA : timeA - timeB;
+  });
+
   const handleDownloadCsv = () => {
     try {
       setIsDownloading(true);
@@ -43,7 +53,7 @@ export const LiteracyExportModal = (props: {
       const safeStatus = selectedStatus.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const filename = `relacao_alunos_alfabetizacao_${safeStatus}_${dateStr}.csv`;
 
-      const csvContent = generateLiteracyCsv(filteredStudents);
+      const csvContent = generateLiteracyCsv(sortedStudents);
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -54,7 +64,7 @@ export const LiteracyExportModal = (props: {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      logLiteracyExportAuditAction(selectedStatus, filteredStudents.length).catch(() => { });
+      logLiteracyExportAuditAction(selectedStatus, sortedStudents.length).catch(() => { });
     } catch (error) {
       console.error('Erro ao baixar planilha CSV:', error);
     } finally {
@@ -214,7 +224,20 @@ export const LiteracyExportModal = (props: {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1">
+              <span className="text-[11px] font-bold text-slate-500">Ordem:</span>
+              <select
+                value={sortOrder}
+                onChange={e => setSortOrder(e.target.value as 'recent' | 'oldest' | 'name')}
+                className="bg-transparent text-xs font-bold text-slate-700 outline-none"
+              >
+                <option value="recent">Mais Recentes (Data/Hora ↓)</option>
+                <option value="oldest">Mais Antigos (Data/Hora ↑)</option>
+                <option value="name">Alfabética (A-Z)</option>
+              </select>
+            </div>
+
             <a
               href={`/dashboard/alfabetizacao/relatorio?status=${selectedStatus}&shift=${selectedShift}`}
               target="_blank"
@@ -265,7 +288,7 @@ export const LiteracyExportModal = (props: {
         {/* CONTEÚDO DO DOCUMENTO OFICIAL (FORMATADO PARA PAPEL A4 E ENVIO A ÓRGÃO) */}
         <div className="print:m-0 print:overflow-visible print:p-0">
           <LiteracyOfficialReportDocument
-            students={filteredStudents}
+            students={sortedStudents}
             organizationName={props.organizationName}
             selectedStatus={selectedStatus}
             selectedShift={selectedShift}

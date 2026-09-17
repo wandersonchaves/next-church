@@ -18,6 +18,16 @@ export const LiteracyReportPageClient = (props: {
   selectedShift: string;
 }) => {
   const [isDownloading, setIsDownloading] = React.useState(false);
+  const [sortOrder, setSortOrder] = React.useState<'recent' | 'oldest' | 'name'>('recent');
+
+  const sortedStudents = [...props.students].sort((a, b) => {
+    if (sortOrder === 'name') {
+      return a.studentName.localeCompare(b.studentName);
+    }
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return sortOrder === 'recent' ? timeB - timeA : timeA - timeB;
+  });
 
   const handlePrint = () => {
     if (typeof window !== 'undefined') {
@@ -33,7 +43,7 @@ export const LiteracyReportPageClient = (props: {
       const safeStatus = props.selectedStatus.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const filename = `relacao_alunos_alfabetizacao_${safeStatus}_${dateStr}.csv`;
 
-      const csvContent = generateLiteracyCsv(props.students);
+      const csvContent = generateLiteracyCsv(sortedStudents);
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -44,7 +54,7 @@ export const LiteracyReportPageClient = (props: {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      logLiteracyExportAuditAction(props.selectedStatus, props.students.length).catch(() => { });
+      logLiteracyExportAuditAction(props.selectedStatus, sortedStudents.length).catch(() => { });
     } catch (error) {
       console.error('Erro ao baixar planilha CSV:', error);
     } finally {
@@ -77,7 +87,20 @@ export const LiteracyReportPageClient = (props: {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1">
+              <span className="text-[11px] font-bold text-slate-500">Ordem:</span>
+              <select
+                value={sortOrder}
+                onChange={e => setSortOrder(e.target.value as 'recent' | 'oldest' | 'name')}
+                className="bg-transparent text-xs font-bold text-slate-700 outline-none"
+              >
+                <option value="recent">Mais Recentes (Data/Hora ↓)</option>
+                <option value="oldest">Mais Antigos (Data/Hora ↑)</option>
+                <option value="name">Alfabética (A-Z)</option>
+              </select>
+            </div>
+
             <button
               type="button"
               onClick={handleDownloadCsv}
@@ -118,7 +141,7 @@ export const LiteracyReportPageClient = (props: {
       {/* ÁREA DO DOCUMENTO OFICIAL (FOLHA A4) */}
       <div className="mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl md:p-12 print:m-0 print:max-w-none print:rounded-none print:border-none print:p-0 print:shadow-none">
         <LiteracyOfficialReportDocument
-          students={props.students}
+          students={sortedStudents}
           organizationName={props.organizationName}
           selectedStatus={props.selectedStatus}
           selectedShift={props.selectedShift}

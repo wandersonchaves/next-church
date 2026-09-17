@@ -3,7 +3,9 @@ import {
   escapeCsvCell,
   formatBrazilianDate,
   formatBrazilianDateTime,
+  formatBrazilianTime,
   generateLiteracyCsv,
+  getDailyRegistrationStats,
   LITERACY_EXPORT_HEADERS,
   type LiteracyExportStudent,
 } from './LiteracyExport';
@@ -46,6 +48,49 @@ describe('LiteracyExport', () => {
       const date = new Date(2026, 2, 10, 14, 30);
 
       expect(formatBrazilianDateTime(date)).toBe('10/03/2026 14:30');
+    });
+
+    it('returns hyphen for null or invalid date', () => {
+      expect(formatBrazilianDateTime(null)).toBe('-');
+      expect(formatBrazilianDateTime('invalid-date')).toBe('-');
+    });
+  });
+
+  describe('formatBrazilianTime', () => {
+    it('formats time accurately in HH:mm format', () => {
+      const date = new Date(2026, 2, 10, 9, 5);
+
+      expect(formatBrazilianTime(date)).toBe('09:05');
+    });
+
+    it('returns hyphen for null or invalid date', () => {
+      expect(formatBrazilianTime(null)).toBe('-');
+      expect(formatBrazilianTime('invalid-date')).toBe('-');
+    });
+  });
+
+  describe('getDailyRegistrationStats', () => {
+    it('groups registrations by date and counts accurately', () => {
+      const mockStudents = [
+        { createdAt: new Date(2026, 2, 17, 10, 0) },
+        { createdAt: new Date(2026, 2, 17, 15, 30) },
+        { createdAt: new Date(2026, 2, 16, 9, 0) },
+        { createdAt: '2026-03-16T14:20:00.000Z' },
+        { createdAt: new Date(2026, 2, 15, 11, 45) },
+      ];
+
+      const stats = getDailyRegistrationStats(mockStudents);
+
+      expect(stats.length).toBe(3);
+      expect(stats[0]?.date).toBe('17/03/2026');
+      expect(stats[0]?.count).toBe(2);
+      expect(stats[2]?.date).toBe('15/03/2026');
+      expect(stats[2]?.count).toBe(1);
+    });
+
+    it('handles empty or invalid list gracefully', () => {
+      expect(getDailyRegistrationStats([])).toEqual([]);
+      expect(getDailyRegistrationStats([{ createdAt: null }, { createdAt: 'invalid' }])).toEqual([]);
     });
   });
 

@@ -20,6 +20,7 @@ import {
   deleteLiteracyStudentAction,
 } from '@/app/[locale]/(auth)/dashboard/alfabetizacao/actions';
 import { Link } from '@/libs/I18nNavigation';
+import { formatBrazilianDateTime } from '@/utils/LiteracyExport';
 import { LiteracyExportModal } from './LiteracyExportModal';
 
 type Student = {
@@ -383,13 +384,25 @@ export const LiteracyDashboardClient = (props: {
                                   </span>
                                 )}
                               </div>
-                              {student.registeredBy && (
-                                <div className="mt-1 text-[10px] font-medium text-slate-400">
-                                  Cadastrado por:
-                                  {' '}
-                                  {student.registeredBy}
-                                </div>
-                              )}
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                                {student.createdAt && (
+                                  <span>
+                                    Cadastrado em:
+                                    {' '}
+                                    {formatBrazilianDateTime(student.createdAt)}
+                                  </span>
+                                )}
+                                {student.registeredBy && (
+                                  <>
+                                    <span>•</span>
+                                    <span>
+                                      Por:
+                                      {' '}
+                                      {student.registeredBy}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </td>
 
                             {/* CONTATO / RESPONSÁVEL */}

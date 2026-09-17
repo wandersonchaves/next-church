@@ -1,5 +1,5 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { setRequestLocale } from 'next-intl/server';
 import { LiteracyReportPageClient } from '@/components/Literacy/LiteracyReportPageClient';
 import { db } from '@/libs/DB';
@@ -52,7 +52,7 @@ export default async function LiteracyReportPage(props: {
     .select()
     .from(literacyStudents)
     .where(and(...conditions))
-    .orderBy(asc(literacyStudents.studentName));
+    .orderBy(desc(literacyStudents.createdAt), asc(literacyStudents.studentName));
 
   return (
     <LiteracyReportPageClient

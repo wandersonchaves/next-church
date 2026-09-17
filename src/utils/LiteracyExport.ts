@@ -105,6 +105,70 @@ export function formatBrazilianDateTime(date: Date | string | null | undefined):
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
+/**
+ * Formats a Date object or ISO string to Brazilian time format HH:mm.
+ * @param date - Date to format.
+ * @returns Formatted time string or hyphen if invalid.
+ */
+export function formatBrazilianTime(date: Date | string | null | undefined): string {
+  if (!date) {
+    return '-';
+  }
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) {
+    return '-';
+  }
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+export type DailyRegistrationStat = {
+  date: string;
+  count: number;
+  timestamp: number;
+};
+
+/**
+ * Aggregates students by registration date (DD/MM/AAAA) with registration count and timestamp.
+ * Results are sorted in descending order (most recent date first).
+ * @param students - List of students with createdAt timestamps.
+ * @returns Array of daily registration statistics sorted by date descending.
+ */
+export function getDailyRegistrationStats(
+  students: { createdAt?: Date | string | null }[],
+): DailyRegistrationStat[] {
+  const map = new Map<string, { count: number; timestamp: number }>();
+
+  for (const student of students) {
+    if (!student.createdAt) {
+      continue;
+    }
+    const d = typeof student.createdAt === 'string' ? new Date(student.createdAt) : student.createdAt;
+    const time = d.getTime();
+    if (Number.isNaN(time)) {
+      continue;
+    }
+    const dateKey = formatBrazilianDate(d);
+    if (dateKey === '-') {
+      continue;
+    }
+    const existing = map.get(dateKey);
+    if (existing) {
+      existing.count += 1;
+      if (time > existing.timestamp) {
+        existing.timestamp = time;
+      }
+    } else {
+      map.set(dateKey, { count: 1, timestamp: time });
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([date, data]) => ({ date, count: data.count, timestamp: data.timestamp }))
+    .sort((a, b) => b.timestamp - a.timestamp);
+}
+
 export const LITERACY_EXPORT_HEADERS = [
   'Nº',
   'Nome do Aluno',
